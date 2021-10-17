@@ -1,4 +1,20 @@
 use clap::{App, Arg};
+use std::net::IpAddr;
+
+pub enum ParsingStatus {
+    OkEntry,
+    BadEntry(IpAddr),
+}
+pub enum Judgment {
+    Good,
+    Remand,
+    Bad(&'static str, IpAddr),
+}
+
+pub enum JailStatus {
+    Remand,
+    Jailed(IpAddr),
+}
 
 pub fn cli() -> App<'static, 'static> {
     App::new("ban internets scanner fast 🍶")

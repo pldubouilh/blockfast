@@ -5,6 +5,8 @@ use std::sync::Mutex;
 
 use anyhow::*;
 
+use crate::utils::JailStatus;
+
 pub struct Jail {
     jailtime: u32,
     allowance: u8,
@@ -91,7 +93,7 @@ impl Jail {
         })
     }
 
-    pub fn probe(&self, ip: IpAddr) -> Result<bool> {
+    pub fn probe(&self, ip: IpAddr) -> Result<JailStatus> {
         let should_ban = {
             let mut locked_map = self.remand.lock().map_err(|_| anyhow!("cant lock"))?;
 
@@ -108,9 +110,9 @@ impl Jail {
 
         if should_ban {
             ipset_block(self.jailtime, ip)?;
-            Ok(true)
+            Ok(JailStatus::Jailed(ip))
         } else {
-            Ok(false)
+            Ok(JailStatus::Remand)
         }
     }
 }
