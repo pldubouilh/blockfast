@@ -1,28 +1,30 @@
-use std::net::IpAddr;
-
+use crate::utils::Error;
 use lazy_static::lazy_static;
+use std::net::IpAddr;
 
 // TODO: allow user-provided list
 // TODO: match different error-levels (10 404, but only 5 401, etc...)
 lazy_static! {
-    static ref BAD_STATUSES: [&'static str; 2] = ["401", "429"];
+    static ref BAD_STATUSES: [u32; 2] = [401, 429];
 }
 
-pub fn parse(line: &str) -> Option<IpAddr> {
+pub fn parse(line: &str) -> Result<Option<IpAddr>, Error> {
     // TODO: Use a proper parser ?
     let elts: Vec<&str> = line.split_whitespace().collect();
-    let ip = elts[0].parse::<IpAddr>().ok();
-    let http_code = elts[elts.len() - 2] as &str;
 
-    BAD_STATUSES.iter().find_map(
-        |bad_status| {
-            if http_code == *bad_status {
-                ip
-            } else {
-                None
-            }
-        },
-    )
+    let ip_str = elts[0];
+    let ip = ip_str.parse::<IpAddr>().or(Err(Error::CantParse))?;
+
+    let http_code_str = elts[elts.len() - 2] as &str;
+    let http_code = http_code_str.parse::<u32>().or(Err(Error::CantParse))?;
+
+    for status in BAD_STATUSES.iter() {
+        if *status == http_code {
+            return Ok(Some(ip));
+        }
+    }
+
+    Ok(None)
 }
 
 #[cfg(test)]
@@ -36,7 +38,10 @@ mod tests {
             "8.8.8.8 - p [25/Sep/2021:13:49:56 +0200] \"POST /some/rpc HTTP/2.0\" 429 923",
         ];
 
-        vectors.iter().for_each(|e| assert!(parse(*e).is_some()))
+        vectors.iter().for_each(|e| {
+            let ret = parse(*e);
+            assert!(ret.unwrap().is_some());
+        })
     }
 
     #[test]
@@ -46,6 +51,22 @@ mod tests {
             "8.8.8.8 - p [25/Sep/2021:13:49:56 +0200] \"POST /some/rpc HTTP/2.0\" 404 923",
         ];
 
-        vectors.iter().for_each(|e| assert!(parse(*e).is_none()))
+        vectors.iter().for_each(|e| {
+            let ret = parse(*e);
+            assert!(ret.unwrap().is_none());
+        })
+    }
+
+    #[test]
+    fn malformed() {
+        let vectors = [
+            "8.8.8.8.8 - p [25/Sep/2021:13:49:56 +0200] \"POST /some/rpc HTTP/2.0\" 200 923",
+            "8.8.8.8 - p [25/Sep/2021:13:49:56 +0200] \"POST /some/rpc HTTP/2.0\"",
+        ];
+
+        vectors.iter().for_each(|e| {
+            let ret = parse(*e);
+            assert!(ret.is_err());
+        })
     }
 }

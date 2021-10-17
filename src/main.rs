@@ -6,6 +6,7 @@ mod utils;
 
 mod jail;
 use crate::jail::Jail;
+use crate::utils::Error;
 
 async fn run() -> Option<()> {
     let args = utils::cli().get_matches();
@@ -36,12 +37,18 @@ async fn run() -> Option<()> {
         let payload = line.line();
         let path = line.source().display().to_string();
 
-        if do_sshd && path.ends_with(path_sshd) {
-            sshd::parse(payload).and_then(|ip| jail.probe(ip));
+        let res = if do_sshd && path.ends_with(path_sshd) {
+            sshd::parse(payload)
         } else if do_clf && path.ends_with(path_clf) {
-            clf::parse(payload).and_then(|ip| jail.probe(ip));
+            clf::parse(payload)
         } else {
-            eprintln!("! unknown logline: {}", path);
+            Err(Error::UnknownError)
+        };
+
+        if let Ok(Some(ip)) = res {
+            jail.probe(ip);
+        } else {
+            eprintln!("! error processing logline: {}", path);
         }
     }
 
