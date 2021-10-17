@@ -1,9 +1,10 @@
 use anyhow::*;
-use std::net::IpAddr;
-
 use lazy_static::lazy_static;
 use regex::Regex;
+use std::net::IpAddr;
 use std::str::FromStr;
+
+use crate::utils::ParsingStatus;
 
 struct Rule {
     matcher: String,
@@ -27,7 +28,7 @@ lazy_static! {
     ];
 }
 
-pub fn parse(line: &str) -> Result<Option<IpAddr>> {
+pub fn parse(line: &str) -> Result<ParsingStatus> {
     let hits = SSHD_BAD.iter().find_map(|rule| {
         if line.contains(&rule.matcher) {
             rule.extractor.captures(line)
@@ -37,7 +38,7 @@ pub fn parse(line: &str) -> Result<Option<IpAddr>> {
     });
 
     if hits.is_none() {
-        return Ok(None);
+        return Ok(ParsingStatus::OkEntry);
     }
 
     let ip = hits
@@ -45,7 +46,7 @@ pub fn parse(line: &str) -> Result<Option<IpAddr>> {
         .and_then(|m| IpAddr::from_str(m.as_str()).ok());
 
     match ip {
-        Some(ip) => Ok(Some(ip)),
+        Some(ip) => Ok(ParsingStatus::BadEntry(ip)),
         None => Err(anyhow!("cant parse sshd entry")),
     }
 }
@@ -63,8 +64,11 @@ mod tests {
         ];
 
         vectors.iter().for_each(|e| {
-            let ret = parse(*e);
-            assert!(ret.unwrap().is_some());
+            let ret = parse(*e).unwrap();
+            match ret {
+                ParsingStatus::BadEntry(_) => {}
+                _ => panic!("bad parsing"),
+            }
         })
     }
 
@@ -77,8 +81,11 @@ mod tests {
         ];
 
         vectors.iter().for_each(|e| {
-            let ret = parse(*e);
-            assert!(ret.unwrap().is_none());
+            let ret = parse(*e).unwrap();
+            match ret {
+                ParsingStatus::OkEntry => {}
+                _ => panic!("bad parsing"),
+            }
         })
     }
 

@@ -1,3 +1,4 @@
+use crate::utils::ParsingStatus;
 use anyhow::Result;
 use lazy_static::lazy_static;
 use std::net::IpAddr;
@@ -8,7 +9,7 @@ lazy_static! {
     static ref BAD_STATUSES: [u32; 2] = [401, 429];
 }
 
-pub fn parse(line: &str) -> Result<Option<IpAddr>> {
+pub fn parse(line: &str) -> Result<ParsingStatus> {
     // TODO: Use a proper parser ?
     let elts: Vec<&str> = line.split_whitespace().collect();
 
@@ -20,11 +21,11 @@ pub fn parse(line: &str) -> Result<Option<IpAddr>> {
 
     for status in BAD_STATUSES.iter() {
         if *status == http_code {
-            return Ok(Some(ip));
+            return Ok(ParsingStatus::BadEntry(ip));
         }
     }
 
-    Ok(None)
+    Ok(ParsingStatus::OkEntry)
 }
 
 #[cfg(test)]
@@ -39,8 +40,11 @@ mod tests {
         ];
 
         vectors.iter().for_each(|e| {
-            let ret = parse(*e);
-            assert!(ret.unwrap().is_some());
+            let ret = parse(*e).unwrap();
+            match ret {
+                ParsingStatus::BadEntry(_) => {}
+                _ => panic!("bad parsing"),
+            }
         })
     }
 
@@ -52,8 +56,11 @@ mod tests {
         ];
 
         vectors.iter().for_each(|e| {
-            let ret = parse(*e);
-            assert!(ret.unwrap().is_none());
+            let ret = parse(*e).unwrap();
+            match ret {
+                ParsingStatus::OkEntry => {}
+                _ => panic!("bad parsing"),
+            }
         })
     }
 

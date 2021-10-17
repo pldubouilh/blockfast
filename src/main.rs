@@ -7,8 +7,15 @@ mod utils;
 
 mod jail;
 use crate::jail::Jail;
+use crate::utils::*;
 
-fn judge(path_sshd: &str, path_clf: &str, payload: &str, path: &str, jail: &Jail) -> Result<()> {
+fn judge(
+    path_sshd: &str,
+    path_clf: &str,
+    payload: &str,
+    path: &str,
+    jail: &Jail,
+) -> Result<Judgment> {
     let do_sshd = !path_sshd.is_empty();
     let do_clf = !path_clf.is_empty();
     let mut target = "";
@@ -24,16 +31,16 @@ fn judge(path_sshd: &str, path_clf: &str, payload: &str, path: &str, jail: &Jail
     };
 
     let ip = match ret_parse? {
-        Some(ip) => ip,
-        None => return Ok(()),
+        ParsingStatus::OkEntry => return Ok(Judgment::Good),
+        ParsingStatus::BadEntry(ip) => ip,
     };
 
-    if jail.probe(ip)? {
-        eprintln!("~ {} - too many infraction, jailtime for: {}", target, ip);
+    match jail.probe(ip)? {
+        JailStatus::Remand => Ok(Judgment::Remand),
+        JailStatus::Jailed(ip) => Ok(Judgment::Bad(target, ip)),
     }
-
-    Ok(())
 }
+
 async fn run() -> Result<()> {
     let args = utils::cli().get_matches();
     let mut lines = MuxedLines::new()?;
@@ -69,9 +76,14 @@ async fn run() -> Result<()> {
         let payload = line.line();
         let path = line.source().display().to_string();
 
-        if let Err(err) = judge(path_sshd, path_clf, payload, &path, &jail) {
-            eprintln!("! ERR {:?} - file {}", err, path)
-        }
+        match judge(path_sshd, path_clf, payload, &path, &jail) {
+            Err(err) => eprintln!("! ERR {:?} - file {}", err, path),
+            Ok(Judgment::Good) => {}
+            Ok(Judgment::Remand) => {}
+            Ok(Judgment::Bad(target, ip)) => {
+                eprintln!("~ too many infraction, {} jailtime for: {}", target, ip)
+            }
+        };
     }
 
     Ok(())
