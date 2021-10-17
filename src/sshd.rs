@@ -1,4 +1,4 @@
-use crate::utils::Error;
+use anyhow::*;
 use std::net::IpAddr;
 
 use lazy_static::lazy_static;
@@ -27,7 +27,7 @@ lazy_static! {
     ];
 }
 
-pub fn parse(line: &str) -> Result<Option<IpAddr>, Error> {
+pub fn parse(line: &str) -> Result<Option<IpAddr>> {
     let hits = SSHD_BAD.iter().find_map(|rule| {
         if line.contains(&rule.matcher) {
             rule.extractor.captures(line)
@@ -46,7 +46,7 @@ pub fn parse(line: &str) -> Result<Option<IpAddr>, Error> {
 
     match ip {
         Some(ip) => Ok(Some(ip)),
-        None => Err(Error::CantParse),
+        None => Err(anyhow!("cant parse sshd entry")),
     }
 }
 

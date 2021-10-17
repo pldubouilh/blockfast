@@ -12,4 +12,4 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 lazy_static = "1.4.0"
 regex = "1.5.4"
 clap = "2.33.3"
-thiserror = "1.0.26"
+anyhow = "1.0.44"

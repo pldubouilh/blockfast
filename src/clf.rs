@@ -1,4 +1,4 @@
-use crate::utils::Error;
+use anyhow::Result;
 use lazy_static::lazy_static;
 use std::net::IpAddr;
 
@@ -8,15 +8,15 @@ lazy_static! {
     static ref BAD_STATUSES: [u32; 2] = [401, 429];
 }
 
-pub fn parse(line: &str) -> Result<Option<IpAddr>, Error> {
+pub fn parse(line: &str) -> Result<Option<IpAddr>> {
     // TODO: Use a proper parser ?
     let elts: Vec<&str> = line.split_whitespace().collect();
 
     let ip_str = elts[0];
-    let ip = ip_str.parse::<IpAddr>().or(Err(Error::CantParse))?;
+    let ip = ip_str.parse::<IpAddr>()?;
 
     let http_code_str = elts[elts.len() - 2] as &str;
-    let http_code = http_code_str.parse::<u32>().or(Err(Error::CantParse))?;
+    let http_code = http_code_str.parse::<u32>()?;
 
     for status in BAD_STATUSES.iter() {
         if *status == http_code {

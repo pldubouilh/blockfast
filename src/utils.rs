@@ -1,14 +1,5 @@
 use clap::{App, Arg};
 
-#[derive(Debug, thiserror::Error)]
-#[allow(clippy::large_enum_variant)]
-pub enum Error {
-    #[error("cant parse")]
-    CantParse,
-    #[error("general error")]
-    UnknownError,
-}
-
 pub fn cli() -> App<'static, 'static> {
     App::new("ban internets scanner fast 🍶")
         .version("v0.0.1")

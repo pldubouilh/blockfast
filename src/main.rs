@@ -1,3 +1,4 @@
+use anyhow::*;
 use linemux::MuxedLines;
 
 mod clf;
@@ -6,30 +7,61 @@ mod utils;
 
 mod jail;
 use crate::jail::Jail;
-use crate::utils::Error;
 
-async fn run() -> Option<()> {
+fn judge(path_sshd: &str, path_clf: &str, payload: &str, path: &str, jail: &Jail) -> Result<()> {
+    let do_sshd = !path_sshd.is_empty();
+    let do_clf = !path_clf.is_empty();
+    let mut target = "";
+
+    let ret_parse = if do_sshd && path.ends_with(path_sshd) {
+        target = "sshd";
+        sshd::parse(payload)
+    } else if do_clf && path.ends_with(path_clf) {
+        target = "clf ";
+        clf::parse(payload)
+    } else {
+        Err(anyhow!("cant locate file !"))
+    };
+
+    let ip = match ret_parse? {
+        Some(ip) => ip,
+        None => return Ok(()),
+    };
+
+    if jail.probe(ip)? {
+        eprintln!("~ {} - too many infraction, jailtime for: {}", target, ip);
+    }
+
+    Ok(())
+}
+async fn run() -> Result<()> {
     let args = utils::cli().get_matches();
-    let mut lines = MuxedLines::new().ok()?;
+    let mut lines = MuxedLines::new()?;
 
     // jail
-    let jailtime: u32 = args.value_of("jailtime")?.parse().ok()?;
-    let allowance: u8 = args.value_of("allowance")?.parse().ok()?;
-    let jail = Jail::new(allowance, jailtime);
+    let jailtime_str = args.value_of("jailtime").unwrap_or("");
+    let jailtime = jailtime_str.parse().context("parsing jailtime")?;
+
+    let allowance_str = args.value_of("allowance").unwrap_or("");
+    let allowance = allowance_str.parse().context("parsing allowance")?;
+
+    let jail = Jail::new(allowance, jailtime)?;
+    eprintln!(
+        "+ jail setup, offences allowed: {}, jailtime {}s",
+        allowance, jailtime
+    );
 
     // sshd
     let path_sshd = args.value_of("sshd_logpath").unwrap_or("");
-    let do_sshd = !path_sshd.is_empty();
-    if do_sshd {
-        lines.add_file(path_sshd).await.ok()?;
+    if !path_sshd.is_empty() {
+        lines.add_file(path_sshd).await?;
         eprintln!("+ starting with sshd parsing at {}", path_sshd);
     }
 
     // common log format
     let path_clf = args.value_of("clf_logpath").unwrap_or("");
-    let do_clf = !path_clf.is_empty();
-    if do_clf {
-        lines.add_file(path_clf).await.ok()?;
+    if !path_clf.is_empty() {
+        lines.add_file(path_clf).await?;
         eprintln!("+ starting with clf parsing at {}", path_clf);
     }
 
@@ -37,28 +69,19 @@ async fn run() -> Option<()> {
         let payload = line.line();
         let path = line.source().display().to_string();
 
-        let res = if do_sshd && path.ends_with(path_sshd) {
-            sshd::parse(payload)
-        } else if do_clf && path.ends_with(path_clf) {
-            clf::parse(payload)
-        } else {
-            Err(Error::UnknownError)
-        };
-
-        if let Ok(Some(ip)) = res {
-            jail.probe(ip);
-        } else {
-            eprintln!("! error processing logline: {}", path);
+        if let Err(err) = judge(path_sshd, path_clf, payload, &path, &jail) {
+            eprintln!("! ERR {:?} - file {}", err, path)
         }
     }
 
-    Some(())
+    Ok(())
 }
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
-    let _ = run().await;
-    eprintln!("! ERR");
+    let ret = run().await;
+    let _ = ret.map_err(|e| eprintln!("! ERROR {:?}", e));
+    eprintln!("\n");
     let _ = utils::cli().print_help();
     Ok(())
 }

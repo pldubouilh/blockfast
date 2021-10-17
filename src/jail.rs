@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 use std::net::IpAddr;
-use std::panic::panic_any;
 use std::process::Command;
 use std::sync::Mutex;
+
+use anyhow::*;
 
 pub struct Jail {
     jailtime: u32,
@@ -11,10 +12,11 @@ pub struct Jail {
 }
 
 const JAIL_NAME: &str = "blockfast_jail";
-const GENERAL_PANIC_MSG: &str =
+
+const ERR_MSG: &str =
     "error using ipset/iptables, maybe it's not installed, this program isn't running as root ?";
 
-fn ipset_init() -> Option<()> {
+fn ipset_init() -> Result<()> {
     let init0 = format!("ipset create {} hash:ip timeout 0", JAIL_NAME);
     let init1 = format!(
         "iptables -I INPUT 1 -m set -j DROP --match-set {} src",
@@ -30,41 +32,37 @@ fn ipset_init() -> Option<()> {
     let args2: Vec<&str> = init2.split_whitespace().collect();
 
     // create
-    let out = Command::new("sudo").args(args0).output().ok()?;
-
-    if out.status.code()? != 0 {
-        let already_exists = std::str::from_utf8(&out.stderr)
-            .ok()?
-            .contains("set with the same name already exists");
+    let out = Command::new("sudo").args(args0).output()?;
+    if out.status.code() != Some(0) {
+        let already_exists =
+            std::str::from_utf8(&out.stderr)?.contains("set with the same name already exists");
 
         if already_exists {
-            return None;
+            return Ok(());
         } else {
             eprintln!("{:?}", out);
-            panic_any(GENERAL_PANIC_MSG);
+            bail!(ERR_MSG);
         }
     }
 
     // setup input
-    let out_input = Command::new("sudo").args(args1).output().ok()?;
-
-    if out_input.status.code()? != 0 {
-        eprintln!("{:?}", out_input);
-        panic_any(GENERAL_PANIC_MSG);
+    let out = Command::new("sudo").args(args1).output()?;
+    if out.status.code() != Some(0) {
+        eprintln!("{:?}", out);
+        bail!(ERR_MSG);
     }
 
     // setup fwd
-    let out_fwd = Command::new("sudo").args(args2).output().ok()?;
-
-    if out_fwd.status.code()? != 0 {
-        eprintln!("{:?}", out_fwd);
-        panic_any(GENERAL_PANIC_MSG);
+    let out = Command::new("sudo").args(args2).output()?;
+    if out.status.code() != Some(0) {
+        eprintln!("{:?}", out);
+        bail!(ERR_MSG);
     }
 
-    None
+    Ok(())
 }
 
-fn ipset_block(jailtime: u32, ip: IpAddr) -> Option<()> {
+fn ipset_block(jailtime: u32, ip: IpAddr) -> Result<()> {
     let sentence = format!(
         "ipset add {} {} timeout {}",
         JAIL_NAME,
@@ -73,36 +71,29 @@ fn ipset_block(jailtime: u32, ip: IpAddr) -> Option<()> {
     );
     let sentence_sl: Vec<&str> = sentence.split_whitespace().collect();
 
-    let out = Command::new("sudo").args(sentence_sl).output().ok()?;
-
-    if out.status.code()? != 0 {
-        return None;
+    let out = Command::new("sudo").args(sentence_sl).output()?;
+    if out.status.code() != Some(0) {
+        eprintln!("{:?}", out);
+        bail!("error executing ipset ban");
     }
 
-    Some(())
+    Ok(())
 }
 
 impl Jail {
-    pub fn new(allowance: u8, jailtime: u32) -> Jail {
-        if ipset_init().is_some() {
-            panic_any(GENERAL_PANIC_MSG);
-        };
+    pub fn new(allowance: u8, jailtime: u32) -> Result<Jail> {
+        ipset_init()?;
 
-        eprintln!(
-            "+ jail setup, allowing {} offences, jailtime: {}s",
-            allowance, jailtime
-        );
-
-        Jail {
+        Ok(Jail {
             allowance,
             jailtime,
             remand: Mutex::new(HashMap::new()),
-        }
+        })
     }
 
-    pub fn probe(&self, ip: IpAddr) -> Option<()> {
+    pub fn probe(&self, ip: IpAddr) -> Result<bool> {
         let should_ban = {
-            let mut locked_map = self.remand.lock().ok()?;
+            let mut locked_map = self.remand.lock().map_err(|_| anyhow!("cant lock"))?;
 
             // TODO: set time of last offence, and add grace
             let hits = *locked_map.entry(ip).and_modify(|e| *e += 1).or_insert(1);
@@ -116,12 +107,10 @@ impl Jail {
         };
 
         if should_ban {
-            match ipset_block(self.jailtime, ip) {
-                Some(_) => eprintln!("~ {} going to jail", ip),
-                None => eprintln!("! ERR {} going to jail", ip),
-            }
+            ipset_block(self.jailtime, ip)?;
+            Ok(true)
+        } else {
+            Ok(false)
         }
-
-        None
     }
 }
