@@ -43,7 +43,7 @@ fn judge(
 
 async fn run() -> Result<()> {
     let args = utils::cli().get_matches();
-    let mut lines = MuxedLines::new()?;
+    let mut lines = MuxedLines::new().context("parsing cli args")?;
 
     // jail
     let jailtime_str = args.value_of("jailtime").unwrap_or("");
@@ -52,7 +52,7 @@ async fn run() -> Result<()> {
     let allowance_str = args.value_of("allowance").unwrap_or("");
     let allowance = allowance_str.parse().context("parsing allowance")?;
 
-    let jail = Jail::new(allowance, jailtime)?;
+    let jail = Jail::new(allowance, jailtime).context("init jail")?;
     eprintln!(
         "+ jail setup, offences allowed: {}, jailtime {}s",
         allowance, jailtime
@@ -68,7 +68,7 @@ async fn run() -> Result<()> {
     // common log format
     let path_clf = args.value_of("clf_logpath").unwrap_or("");
     if !path_clf.is_empty() {
-        lines.add_file(path_clf).await?;
+        lines.add_file(path_clf).await.context("opening log file")?;
         eprintln!("+ starting with clf parsing at {}", path_clf);
     }
 

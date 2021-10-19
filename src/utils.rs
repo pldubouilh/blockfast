@@ -29,14 +29,14 @@ pub fn cli() -> App<'static, 'static> {
             Arg::with_name("jailtime")
                 .short("j")
                 .help("jail time (seconds)")
-                .default_value("3600")
+                .default_value("7200")
                 .takes_value(true),
         )
         .arg(
             Arg::with_name("allowance")
                 .short("a")
                 .help("how many offences allowed (max 255")
-                .default_value("5")
+                .default_value("6")
                 .takes_value(true),
         )
         .arg(
