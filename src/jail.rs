@@ -3,6 +3,8 @@ use std::net::IpAddr;
 use std::process::Command;
 use std::sync::Mutex;
 
+use std::ffi::CString;
+
 use anyhow::*;
 
 use crate::utils::JailStatus;
@@ -10,59 +12,13 @@ use crate::utils::JailStatus;
 pub struct Jail {
     jailtime: u32,
     allowance: u8,
+    ipset_ptr: *const u8, // opaque C ptr to struct ipset
     remand: Mutex<HashMap<IpAddr, u8>>,
 }
 
-const JAIL_NAME: &str = "blockfast_jail";
 
 const ERR_MSG: &str =
     "error using ipset/iptables, maybe it's not installed, this program isn't running as root ?";
-
-fn ipset_init() -> Result<()> {
-    let init0 = format!("ipset create {} hash:ip timeout 0", JAIL_NAME);
-    let init1 = format!(
-        "iptables -I INPUT 1 -m set -j DROP --match-set {} src",
-        JAIL_NAME
-    );
-    let init2 = format!(
-        "iptables -I FORWARD 1 -m set -j DROP --match-set {} src",
-        JAIL_NAME
-    );
-
-    let args0: Vec<&str> = init0.split_whitespace().collect();
-    let args1: Vec<&str> = init1.split_whitespace().collect();
-    let args2: Vec<&str> = init2.split_whitespace().collect();
-
-    // create
-    let out = Command::new("sudo").args(args0).output()?;
-    if out.status.code() != Some(0) {
-        let already_exists =
-            std::str::from_utf8(&out.stderr)?.contains("set with the same name already exists");
-
-        if already_exists {
-            return Ok(());
-        } else {
-            eprintln!("{:?}", out);
-            bail!(ERR_MSG);
-        }
-    }
-
-    // setup input
-    let out = Command::new("sudo").args(args1).output()?;
-    if out.status.code() != Some(0) {
-        eprintln!("{:?}", out);
-        bail!(ERR_MSG);
-    }
-
-    // setup fwd
-    let out = Command::new("sudo").args(args2).output()?;
-    if out.status.code() != Some(0) {
-        eprintln!("{:?}", out);
-        bail!(ERR_MSG);
-    }
-
-    Ok(())
-}
 
 fn ipset_block(jailtime: u32, ip: IpAddr) -> Result<()> {
     let sentence = format!(
@@ -82,13 +38,35 @@ fn ipset_block(jailtime: u32, ip: IpAddr) -> Result<()> {
     Ok(())
 }
 
+const JAIL_NAME: &str = "blockfast_jail";
+const IPSET_SETNAME: u32 = 1;
+const IPSET_OPT_FAMILY: u32 = 3;
+const IPSET_OPT_IP: u32 = 4;
+const IPSET_OPT_TIMEOUT: u32 = 10;
+
+
+#[link(name = "ipset")]
+extern "C" {
+    fn ipset_init() -> *const u8; //
+    fn ipset_session_data_set(ipset_struct: *const u8, target: u32, name: CString);
+}
+
 impl Jail {
     pub fn new(allowance: u8, jailtime: u32) -> Result<Jail> {
-        ipset_init()?;
+        let ipset_ptr = unsafe { ipset_init() };
+
+        if ipset_ptr.is_null() {
+            bail!(ERR_MSG);
+        }
+
+        let JAIL_NAME_C = CString::new("blockfast_thisisatest").unwrap();
+
+        let a = unsafe { ipset_session_data_set(ipset_ptr, IPSET_SETNAME, JAIL_NAME_C) };
 
         Ok(Jail {
             allowance,
             jailtime,
+            ipset_ptr,
             remand: Mutex::new(HashMap::new()),
         })
     }

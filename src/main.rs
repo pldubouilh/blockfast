@@ -90,7 +90,7 @@ async fn run() -> Result<()> {
 }
 
 #[tokio::main]
-async fn main() -> std::io::Result<()> {
+async fn main() -> Result<()> {
     let ret = run().await;
     let _ = ret.map_err(|e| eprintln!("! ERROR {:?}", e));
     eprintln!("\n");
