@@ -4,6 +4,7 @@ use std::process::Command;
 use std::sync::Mutex;
 
 use anyhow::*;
+use ipset_sys::IpsetSys;
 
 use crate::utils::JailStatus;
 
@@ -11,6 +12,7 @@ pub struct Jail {
     jailtime: u32,
     allowance: u8,
     remand: Mutex<HashMap<IpAddr, u8>>,
+    ipset: IpsetSys,
 }
 
 const JAIL_NAME: &str = "blockfast_jail";
@@ -18,82 +20,48 @@ const JAIL_NAME: &str = "blockfast_jail";
 const ERR_MSG: &str =
     "error using ipset/iptables, maybe it's not installed, this program isn't running as root ?";
 
-fn ipset_init() -> Result<()> {
-    let init0 = format!("ipset create {} hash:ip timeout 0", JAIL_NAME);
-    let init1 = format!(
-        "iptables -I INPUT 1 -m set -j DROP --match-set {} src",
-        JAIL_NAME
-    );
-    let init2 = format!(
-        "iptables -I FORWARD 1 -m set -j DROP --match-set {} src",
-        JAIL_NAME
-    );
+impl Jail {
+    pub fn new(allowance: u8, jailtime: u32) -> Result<Jail> {
+        let init0 = format!(
+            "iptables -I INPUT 1 -m set -j DROP --match-set {} src",
+            JAIL_NAME
+        );
+        let init1 = format!(
+            "iptables -I FORWARD 1 -m set -j DROP --match-set {} src",
+            JAIL_NAME
+        );
 
-    let args0: Vec<&str> = init0.split_whitespace().collect();
-    let args1: Vec<&str> = init1.split_whitespace().collect();
-    let args2: Vec<&str> = init2.split_whitespace().collect();
+        let args1: Vec<&str> = init0.split_whitespace().collect();
+        let args2: Vec<&str> = init1.split_whitespace().collect();
 
-    // create
-    let out = Command::new("sudo").args(args0).output()?;
-    if out.status.code() != Some(0) {
-        let already_exists =
-            std::str::from_utf8(&out.stderr)?.contains("set with the same name already exists");
+        // init ipset
+        let mut ipset = IpsetSys::init()?;
+        let init_cmd = format!("create {} hash:ip timeout 0", JAIL_NAME);
+        let _ = ipset.run(&init_cmd);
 
-        if already_exists {
-            return Ok(());
-        } else {
+        // setup input
+        let out = Command::new("sudo").args(args1).output()?;
+        if out.status.code() != Some(0) {
             eprintln!("{:?}", out);
             bail!(ERR_MSG);
         }
-    }
 
-    // setup input
-    let out = Command::new("sudo").args(args1).output()?;
-    if out.status.code() != Some(0) {
-        eprintln!("{:?}", out);
-        bail!(ERR_MSG);
-    }
-
-    // setup fwd
-    let out = Command::new("sudo").args(args2).output()?;
-    if out.status.code() != Some(0) {
-        eprintln!("{:?}", out);
-        bail!(ERR_MSG);
-    }
-
-    Ok(())
-}
-
-fn ipset_block(jailtime: u32, ip: IpAddr) -> Result<()> {
-    let sentence = format!(
-        "ipset add {} {} timeout {}",
-        JAIL_NAME,
-        ip.to_string(),
-        jailtime
-    );
-    let sentence_sl: Vec<&str> = sentence.split_whitespace().collect();
-
-    let out = Command::new("sudo").args(sentence_sl).output()?;
-    if out.status.code() != Some(0) {
-        eprintln!("{:?}", out);
-        bail!("error executing ipset ban");
-    }
-
-    Ok(())
-}
-
-impl Jail {
-    pub fn new(allowance: u8, jailtime: u32) -> Result<Jail> {
-        ipset_init()?;
+        // setup fwd
+        let out = Command::new("sudo").args(args2).output()?;
+        if out.status.code() != Some(0) {
+            eprintln!("{:?}", out);
+            bail!(ERR_MSG);
+        }
 
         Ok(Jail {
             allowance,
             jailtime,
+            ipset,
             remand: Mutex::new(HashMap::new()),
         })
     }
 
-    pub fn probe(&self, ip: IpAddr) -> Result<JailStatus> {
+    pub fn incr(&mut self, ip: IpAddr) -> Result<JailStatus> {
         let should_ban = {
             let mut locked_map = self.remand.lock().map_err(|_| anyhow!("cant lock"))?;
 
@@ -109,7 +77,13 @@ impl Jail {
         };
 
         if should_ban {
-            ipset_block(self.jailtime, ip)?;
+            let sentence = format!(
+                "add {} {} timeout {}",
+                JAIL_NAME,
+                ip.to_string(),
+                self.jailtime
+            );
+            self.ipset.run(&sentence)?;
             Ok(JailStatus::Jailed(ip))
         } else {
             Ok(JailStatus::Remand)

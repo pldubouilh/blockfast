@@ -14,7 +14,7 @@ fn judge(
     path_clf: &str,
     payload: &str,
     path: &str,
-    jail: &Jail,
+    jail: &mut Jail,
 ) -> Result<Judgment> {
     let do_sshd = !path_sshd.is_empty();
     let do_clf = !path_clf.is_empty();
@@ -35,7 +35,7 @@ fn judge(
         ParsingStatus::BadEntry(ip) => ip,
     };
 
-    match jail.probe(ip)? {
+    match jail.incr(ip)? {
         JailStatus::Remand => Ok(Judgment::Remand),
         JailStatus::Jailed(ip) => Ok(Judgment::Bad(target, ip)),
     }
@@ -52,7 +52,7 @@ async fn run() -> Result<()> {
     let allowance_str = args.value_of("allowance").unwrap_or("");
     let allowance = allowance_str.parse().context("parsing allowance")?;
 
-    let jail = Jail::new(allowance, jailtime)?;
+    let mut jail = Jail::new(allowance, jailtime)?;
     eprintln!(
         "+ jail setup, offences allowed: {}, jailtime {}s",
         allowance, jailtime
@@ -76,7 +76,7 @@ async fn run() -> Result<()> {
         let payload = line.line();
         let path = line.source().display().to_string();
 
-        match judge(path_sshd, path_clf, payload, &path, &jail) {
+        match judge(path_sshd, path_clf, payload, &path, &mut jail) {
             Err(err) => eprintln!("! ERR {:?} - file {}", err, path),
             Ok(Judgment::Good) => {}
             Ok(Judgment::Remand) => {}
