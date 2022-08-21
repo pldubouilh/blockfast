@@ -1,24 +1,29 @@
 use clap::{App, Arg};
 use std::net::IpAddr;
 
+#[derive(Debug)]
 pub enum ParsingStatus {
     OkEntry,
     BadEntry(IpAddr),
 }
-pub enum Judgment {
-    Good,
-    Remand,
-    Bad(&'static str, IpAddr),
+
+macro_rules! log{
+    ($first:expr) => {
+        let e = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?;
+        eprintln!("{} ~ {}", e.as_secs(), $first);
+    };
+    ($first:expr, $($others:expr),+) => {
+        let e = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?;
+        let formatted = format!($first, $($others), *);
+        eprintln!("{} ~ {}", e.as_secs(), formatted);
+    };
 }
 
-pub enum JailStatus {
-    Remand,
-    Jailed(IpAddr),
-}
+pub(crate) use log;
 
 pub fn cli() -> App<'static, 'static> {
     App::new("ban internets scanner fast 🍶")
-        .version("v0.0.1")
+        .version(env!("CARGO_PKG_VERSION"))
         .author("pierre dubouilh <pldubouilh@gmail.com>")
         // .arg(Arg::with_name("prune")
         //     .short("prune")
@@ -29,7 +34,7 @@ pub fn cli() -> App<'static, 'static> {
             Arg::with_name("jailtime")
                 .short("j")
                 .help("jail time (seconds)")
-                .default_value("3600")
+                .default_value("21600") // 6 hours
                 .takes_value(true),
         )
         .arg(
@@ -55,7 +60,7 @@ pub fn cli() -> App<'static, 'static> {
         )
     // .arg(Arg::with_name("clf_bad_http_codes")
     //     .short("cb")
-    //     .help("bad CLF http codes")
-    //     .default_value("{401, 429}")
+    //     .help("bad http statuses for CLF")
+    //     .default_value([401, 429])
     //     .takes_value(true))
 }

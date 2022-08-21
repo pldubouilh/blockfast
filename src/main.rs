@@ -1,5 +1,8 @@
+use std::path::PathBuf;
+use std::result::Result::Ok;
+
 use anyhow::*;
-use linemux::MuxedLines;
+use linemux::{Line, MuxedLines};
 
 mod clf;
 mod sshd;
@@ -9,41 +12,9 @@ mod jail;
 use crate::jail::Jail;
 use crate::utils::*;
 
-fn judge(
-    path_sshd: &str,
-    path_clf: &str,
-    payload: &str,
-    path: &str,
-    jail: &Jail,
-) -> Result<Judgment> {
-    let do_sshd = !path_sshd.is_empty();
-    let do_clf = !path_clf.is_empty();
-    let mut target = "";
-
-    let ret_parse = if do_sshd && path.ends_with(path_sshd) {
-        target = "sshd";
-        sshd::parse(payload)
-    } else if do_clf && path.ends_with(path_clf) {
-        target = "clf ";
-        clf::parse(payload)
-    } else {
-        Err(anyhow!("cant locate file !"))
-    };
-
-    let ip = match ret_parse? {
-        ParsingStatus::OkEntry => return Ok(Judgment::Good),
-        ParsingStatus::BadEntry(ip) => ip,
-    };
-
-    match jail.probe(ip)? {
-        JailStatus::Remand => Ok(Judgment::Remand),
-        JailStatus::Jailed(ip) => Ok(Judgment::Bad(target, ip)),
-    }
-}
-
 async fn run() -> Result<()> {
     let args = utils::cli().get_matches();
-    let mut lines = MuxedLines::new()?;
+    let mut ml = MuxedLines::new()?;
 
     // jail
     let jailtime_str = args.value_of("jailtime").unwrap_or("");
@@ -53,46 +24,54 @@ async fn run() -> Result<()> {
     let allowance = allowance_str.parse().context("parsing allowance")?;
 
     let jail = Jail::new(allowance, jailtime)?;
-    eprintln!(
-        "+ jail setup, offences allowed: {}, jailtime {}s",
-        allowance, jailtime
-    );
 
     // sshd
-    let path_sshd = args.value_of("sshd_logpath").unwrap_or("");
-    if !path_sshd.is_empty() {
-        lines.add_file(path_sshd).await?;
-        eprintln!("+ starting with sshd parsing at {}", path_sshd);
+    let mut path_sshd: PathBuf = args.value_of("sshd_logpath").unwrap_or("").into();
+    if path_sshd.exists() {
+        path_sshd = std::fs::canonicalize(path_sshd)?;
+        ml.add_file(&path_sshd).await?;
+        log!("starting with sshd parsing at {:?}", &path_sshd);
     }
 
     // common log format
-    let path_clf = args.value_of("clf_logpath").unwrap_or("");
-    if !path_clf.is_empty() {
-        lines.add_file(path_clf).await?;
-        eprintln!("+ starting with clf parsing at {}", path_clf);
+    let mut path_clf: PathBuf = args.value_of("clf_logpath").unwrap_or("").into();
+    if path_clf.exists() {
+        path_clf = std::fs::canonicalize(path_clf)?;
+        ml.add_file(&path_clf).await?;
+        log!("starting with clf parsing at {:?}", &path_clf);
     }
 
-    while let Ok(Some(line)) = lines.next_line().await {
+    let assess_line = |line: Line| {
         let payload = line.line();
-        let path = line.source().display().to_string();
+        let path = line.source();
 
-        match judge(path_sshd, path_clf, payload, &path, &jail) {
-            Err(err) => eprintln!("! ERR {:?} - file {}", err, path),
-            Ok(Judgment::Good) => {}
-            Ok(Judgment::Remand) => {}
-            Ok(Judgment::Bad(target, ip)) => {
-                eprintln!("~ too many infraction, {} jailtime for: {}", target, ip)
-            }
+        let (target, ret) = if path == path_sshd {
+            ("sshd", sshd::parse(payload)?)
+        } else if path == path_clf {
+            ("clf", clf::parse(payload)?)
+        } else {
+            bail!("file {:?} unknown", path)
         };
+
+        if let ParsingStatus::BadEntry(ip) = ret {
+            jail.sentence(ip, target)?;
+        }
+
+        Ok(())
+    };
+
+    while let Ok(Some(line)) = ml.next_line().await {
+        if let Err(e) = assess_line(line) {
+            log!("ERR: {:?}", e);
+        }
     }
 
     Ok(())
 }
 
 #[tokio::main]
-async fn main() -> std::io::Result<()> {
-    let ret = run().await;
-    let _ = ret.map_err(|e| eprintln!("! ERROR {:?}", e));
+async fn main() -> Result<()> {
+    run().await?;
     eprintln!("\n");
     let _ = utils::cli().print_help();
     Ok(())

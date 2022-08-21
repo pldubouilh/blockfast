@@ -1,28 +1,35 @@
 use crate::utils::ParsingStatus;
-use anyhow::Result;
+use anyhow::*;
 use lazy_static::lazy_static;
-use std::net::IpAddr;
+use regex::Regex;
+use std::{net::IpAddr, str::FromStr};
 
-// TODO: allow user-provided list
-// TODO: match different error-levels (10 404, but only 5 401, etc...)
 lazy_static! {
     static ref BAD_STATUSES: [u32; 2] = [401, 429];
+    static ref RE_IP: Regex = Regex::new(r"^(\S+)\s").unwrap();
+    static ref RE_STATUS: Regex = Regex::new(r"(\d+)\s(\w+)$").unwrap();
 }
 
+#[allow(clippy::bind_instead_of_map)]
 pub fn parse(line: &str) -> Result<ParsingStatus> {
-    // TODO: Use a proper parser ?
-    let elts: Vec<&str> = line.split_whitespace().collect();
+    let ip = RE_IP
+        .captures(line)
+        .and_then(|c| c.get(1))
+        .and_then(|g| Some(g.as_str()))
+        .and_then(|e| IpAddr::from_str(e).ok())
+        .ok_or_else(|| anyhow!("cant parse clf line - ip"))?;
 
-    let ip_str = elts[0];
-    let ip = ip_str.parse::<IpAddr>()?;
+    let status = RE_STATUS
+        .captures(line)
+        .and_then(|c| c.get(1))
+        .and_then(|g| Some(g.as_str()))
+        .and_then(|e| e.parse::<u32>().ok())
+        .ok_or_else(|| anyhow!("cant parse clf line - status"))?;
 
-    let http_code_str = elts[elts.len() - 2] as &str;
-    let http_code = http_code_str.parse::<u32>()?;
+    let is_bad_status = BAD_STATUSES.iter().any(|s| s == &status);
 
-    for status in BAD_STATUSES.iter() {
-        if *status == http_code {
-            return Ok(ParsingStatus::BadEntry(ip));
-        }
+    if is_bad_status {
+        return Ok(ParsingStatus::BadEntry(ip));
     }
 
     Ok(ParsingStatus::OkEntry)
