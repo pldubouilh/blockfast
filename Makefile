@@ -1,23 +1,41 @@
-build:
+build::
 	cargo build
-	cargo clippy
-	cargo fmt
+	cargo clippy --all
+	cargo fmt --all
 
-run:
+run::
+	touch /tmp/sshdtest
+	touch /tmp/clftest
 	cargo run -- -s=/tmp/sshdtest -c=/tmp/clftest
 
-watch:
-	ls src/*.rs | entr -rc -- make run
-
-test:
-	cargo test
-
-watch-test:
-	ls src/*.rs | entr -rc -- make test
-
-release:
-	cargo build --target x86_64-unknown-linux-musl --release
-
-ci: test
+ci:: test
 	cargo fmt --all -- --check
 	cargo clippy -- -D warnings
+
+publish:: ci
+	cargo publish
+
+watch::
+	ls src/*.rs | entr -rc -- make run
+
+test::
+	cargo test
+
+watch-test::
+	ls src/*.rs | entr -rc -- make test
+
+release::
+	cargo build --target x86_64-unknown-linux-musl --release
+
+hit-sshd::
+	echo "Sep 26 06:25:32 livecompute sshd[23254]: Invalid user neal from 9.124.36.195" >> /tmp/sshdtest
+
+ok-sshd::
+	echo "Sep 26 06:25:19 livecompute sshd[23246]: successful login 8.124.36.195 port 41883 ssh2" >> /tmp/sshdtest
+
+hit-clf::
+	echo "1.124.36.195 - p [25/Sep/2021:13:49:56 +0200] \"POST /some/rpc HTTP/2.0\" 401 923" >> /tmp/clftest
+
+ok-clf::
+	echo "2.124.36.195 - p [25/Sep/2021:13:49:56 +0200] \"POST /some/rpc HTTP/2.0\" 200 23012" >> /tmp/clftest
+
