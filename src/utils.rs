@@ -64,7 +64,7 @@ Example:
     # block invalid sshd attempts & invalid http statuses from caddy
     ./blockfast -s=/var/log/auth.log -j=/caddy/logs
 
-    # generic log parser example with a positive text, and a regex to parse the offending IP.
+    # generic log parser example with a log text to flag, and a regex to parse the offending IP.
     ./blockfast --generic-logpath=/tmp/generictest --generic-positive='Failed password' --generic-ip='from ([0-9a-fA-F:.]+) port'",
     verbatim_doc_comment,
 )]
