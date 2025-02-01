@@ -14,6 +14,13 @@ ci:: test
 	cargo fmt --all -- --check
 	cargo clippy -- -D warnings
 
+build-all::
+	cargo build --target x86_64-unknown-linux-musl --release
+	mkdir -p builds
+	cp target/x86_64-unknown-linux-musl/release/blockfast builds
+	rustc --version > builds/buildout
+	sha256sum builds/blockfast >> builds/buildout
+
 publish:: ci
 	cargo publish
 

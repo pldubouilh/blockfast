@@ -1,0 +1,37 @@
+name: deploy
+
+on:
+  push:
+    tags:
+      - '*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Run tests
+      run: make ci
+
+    - name: Build all artifacts
+      run: make build-all
+
+    - name: "Release gh release versioned"
+      uses: ncipollo/release-action@v1
+      with:
+        allowUpdates: true
+        artifacts: "builds/*"
+        bodyFile: "builds/buildout"
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: "Release gh release latest"
+      uses: ncipollo/release-action@v1
+      with:
+        tag: latest
+        name: Latest
+        allowUpdates: true
+        artifacts: "builds/*"
+        bodyFile: "builds/buildout"
+        token: ${{ secrets.GITHUB_TOKEN }}
