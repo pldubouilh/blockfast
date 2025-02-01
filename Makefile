@@ -8,7 +8,8 @@ run::
 	touch /tmp/clftest
 	touch /tmp/jsontest
 	touch /tmp/generictest
-	cargo run -- -v -s=/tmp/sshdtest -c=/tmp/clftest -j=/tmp/jsontest --generic-logpath=/tmp/generictest --generic-ip='from ([0-9a-fA-F:.]+) port' --generic-positive='Failed password'
+	cargo build
+	sudo target/debug/blockfast -v -s=/tmp/sshdtest -c=/tmp/clftest -j=/tmp/jsontest --generic-logpath=/tmp/generictest --generic-ip='from ([0-9a-fA-F:.]+) port' --generic-positive='Failed password'
 
 ci:: test
 	cargo fmt --all -- --check
@@ -29,9 +30,6 @@ watch::
 
 test::
 	cargo test
-
-watch-test::
-	ls src/*.rs | entr -rc -- make test
 
 release::
 	cargo build --target x86_64-unknown-linux-musl --release
