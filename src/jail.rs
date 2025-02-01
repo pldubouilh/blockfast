@@ -48,7 +48,7 @@ impl Jail {
         })
     }
 
-    pub fn sentence(&self, ip: IpAddr, target: &str) -> Result<()> {
+    pub fn sentence(&self, ip: IpAddr) -> Result<bool> {
         let now = get_epoch();
 
         let should_ban = {
@@ -57,7 +57,8 @@ impl Jail {
             let (hits, _ts) = *locked_map
                 .entry(ip)
                 .and_modify(|(hits, ts)| {
-                    if *ts + self.jailtime as u64 > now { // reset if we have a hit, but past the defined jailtime
+                    if now > *ts + self.jailtime as u64 {
+                        // reset if we have a hit, but past the defined jailtime
                         *ts = now;
                         *hits = 1;
                     } else {
@@ -65,21 +66,20 @@ impl Jail {
                     }
                 })
                 .or_insert((1, now));
-
             if hits < self.allowance {
                 false
             } else {
-                locked_map.remove_entry(&ip); // preserve space
+                locked_map.remove_entry(&ip);
                 true
             }
         };
 
         if should_ban {
-            log!("{} jailtime for: {}", target, ip);
             let cmd = format!("ipset add -exist {} {}", self.name, ip);
             exec(&cmd, "")?;
+            return Ok(true);
         }
 
-        Ok(())
+        Ok(false)
     }
 }

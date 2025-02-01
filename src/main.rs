@@ -1,10 +1,12 @@
-use std::path::PathBuf;
 use std::result::Result::Ok;
 
 use anyhow::*;
+use clap::Parser;
 use linemux::{Line, MuxedLines};
 
 mod clf;
+mod generic;
+mod json;
 mod sshd;
 mod utils;
 
@@ -13,48 +15,91 @@ use crate::jail::Jail;
 use crate::utils::*;
 
 async fn run() -> Result<()> {
-    let args = utils::cli().get_matches();
+    let args = utils::Args::parse();
     let mut ml = MuxedLines::new()?;
 
-    // jail
-    let jailtime_str = args.value_of("jailtime").unwrap_or("");
-    let jailtime = jailtime_str.parse().context("parsing jailtime")?;
-
-    let allowance_str = args.value_of("allowance").unwrap_or("");
-    let allowance = allowance_str.parse().context("parsing allowance")?;
-
-    let jail = Jail::new(allowance, jailtime)?;
+    // generic parser
+    let generic_path = args.generic_logpath.as_ref();
+    let generic_ip_re = args.generic_ip.as_ref();
+    let generic_positive = args.generic_positive.as_ref();
+    let generic_negative = args.generic_negative.as_ref();
+    if args.generic_ip.is_some()
+        || args.generic_logpath.is_some()
+        || args.generic_positive.is_some()
+        || args.generic_negative.is_some()
+    {
+        if args.generic_ip.is_none() || args.generic_logpath.is_none() {
+            bail!("generic parser needs both ip regex and log file path");
+        }
+        if !(args.generic_positive.is_some() ^ args.generic_negative.is_some()) {
+            bail!("generic parser requires either a positive or a negative regex");
+        }
+        if let Some(p) = generic_path.as_ref() {
+            ml.add_file(&p).await?;
+            log!("starting with generic parsing at {:?}", &p);
+        }
+    }
 
     // sshd
-    let mut path_sshd: PathBuf = args.value_of("sshd_logpath").unwrap_or("").into();
-    if path_sshd.exists() {
-        path_sshd = std::fs::canonicalize(path_sshd)?;
-        ml.add_file(&path_sshd).await?;
-        log!("starting with sshd parsing at {:?}", &path_sshd);
+    let sshd_logpath = args.sshd_logpath.as_ref();
+    if let Some(p) = sshd_logpath {
+        ml.add_file(&p).await?;
+        log!("starting with sshd parsing at {:?}", &p);
     }
 
     // common log format
-    let mut path_clf: PathBuf = args.value_of("clf_logpath").unwrap_or("").into();
-    if path_clf.exists() {
-        path_clf = std::fs::canonicalize(path_clf)?;
-        ml.add_file(&path_clf).await?;
-        log!("starting with clf parsing at {:?}", &path_clf);
+    let clf_logpath = args.clf_logpath.as_ref();
+    if let Some(p) = clf_logpath {
+        ml.add_file(&p).await?;
+        log!("starting with clf parsing at {:?}", &p);
     }
+
+    // json
+    let json_logpath = args.json_logpath.as_ref();
+    if let Some(p) = json_logpath {
+        ml.add_file(&p).await?;
+        log!("starting with json parsing at {:?}", &p);
+    }
+
+    if json_logpath.is_none() && clf_logpath.is_none() && sshd_logpath.is_none() {
+        bail!("no log files to parse, see --help");
+    }
+
+    // HTTP statuses
+    let ok_statuses = args.valid_http_statuses.clone();
+    let ok_statuses_ref = ok_statuses.as_ref();
+
+    // jail
+    let jail = Jail::new(args.allowance, args.jailtime)?;
 
     let assess_line = |line: Line| {
         let payload = line.line();
-        let path = line.source();
+        let path_buf = Some(line.source().to_path_buf());
+        let path = path_buf.as_ref();
 
-        let (target, ret) = if path == path_sshd {
+        let (target, ret) = if path == sshd_logpath {
             ("sshd", sshd::parse(payload)?)
-        } else if path == path_clf {
-            ("clf", clf::parse(payload)?)
+        } else if path == clf_logpath {
+            ("clf", clf::parse(payload, ok_statuses_ref)?)
+        } else if path == json_logpath {
+            ("json", json::parse(payload, ok_statuses_ref)?)
+        } else if path == generic_path {
+            (
+                "generic",
+                generic::parse(payload, generic_ip_re, generic_positive, generic_negative)?,
+            )
         } else {
-            bail!("file {:?} unknown", path)
+            bail!("file {:?} unknown ?", path)
         };
 
         if let ParsingStatus::BadEntry(ip) = ret {
-            jail.sentence(ip, target)?;
+            if args.verbose {
+                log!("{} logged offence for {}", target, ip);
+            }
+            let banned = jail.sentence(ip)?;
+            if banned {
+                log!("{} jailtime for {}", target, ip);
+            }
         }
 
         Ok(())
@@ -73,6 +118,5 @@ async fn run() -> Result<()> {
 async fn main() -> Result<()> {
     run().await?;
     eprintln!("\n");
-    let _ = utils::cli().print_help();
     Ok(())
 }

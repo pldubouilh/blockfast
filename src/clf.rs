@@ -5,13 +5,12 @@ use regex::Regex;
 use std::{net::IpAddr, str::FromStr};
 
 lazy_static! {
-    static ref BAD_STATUSES: [u32; 2] = [401, 429];
     static ref RE_IP: Regex = Regex::new(r"^(\S+)\s").unwrap();
     static ref RE_STATUS: Regex = Regex::new(r"(\d+)\s(\w+)$").unwrap();
 }
 
 #[allow(clippy::bind_instead_of_map)]
-pub fn parse(line: &str) -> Result<ParsingStatus> {
+pub fn parse(line: &str, valid_statuses: &[u32]) -> Result<ParsingStatus> {
     let ip = RE_IP
         .captures(line)
         .and_then(|c| c.get(1))
@@ -26,9 +25,8 @@ pub fn parse(line: &str) -> Result<ParsingStatus> {
         .and_then(|e| e.parse::<u32>().ok())
         .ok_or_else(|| anyhow!("cant parse clf line - status"))?;
 
-    let is_bad_status = BAD_STATUSES.iter().any(|s| s == &status);
-
-    if is_bad_status {
+    let is_good_status = valid_statuses.iter().any(|s| s == &status);
+    if !is_good_status {
         return Ok(ParsingStatus::BadEntry(ip));
     }
 
@@ -47,7 +45,7 @@ mod tests {
         ];
 
         vectors.iter().for_each(|e| {
-            let ret = parse(*e).unwrap();
+            let ret = parse(*e, &vec![200, 404]).unwrap();
             match ret {
                 ParsingStatus::BadEntry(_) => {}
                 _ => panic!("bad parsing"),
@@ -63,7 +61,7 @@ mod tests {
         ];
 
         vectors.iter().for_each(|e| {
-            let ret = parse(*e).unwrap();
+            let ret = parse(*e, &vec![200, 404]).unwrap();
             match ret {
                 ParsingStatus::OkEntry => {}
                 _ => panic!("bad parsing"),
@@ -79,7 +77,7 @@ mod tests {
         ];
 
         vectors.iter().for_each(|e| {
-            let ret = parse(*e);
+            let ret = parse(*e, &vec![200, 404]);
             assert!(ret.is_err());
         })
     }
