@@ -7,15 +7,20 @@ pub enum ParsingStatus {
     BadEntry(IpAddr),
 }
 
+pub fn get_epoch() -> u64 {
+    let e = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH);
+    e.map(|e| e.as_secs()).unwrap_or(0)
+}
+
 macro_rules! log{
     ($first:expr) => {
-        let e = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?;
-        eprintln!("{} ~ {}", e.as_secs(), $first);
+        let ts = crate::utils::get_epoch();
+        eprintln!("{} ~ {}", ts, $first);
     };
     ($first:expr, $($others:expr),+) => {
-        let e = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?;
+        let ts = crate::utils::get_epoch();
         let formatted = format!($first, $($others), *);
-        eprintln!("{} ~ {}", e.as_secs(), formatted);
+        eprintln!("{} ~ {}", ts, formatted);
     };
 }
 
