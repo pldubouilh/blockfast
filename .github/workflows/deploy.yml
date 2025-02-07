@@ -1,13 +1,32 @@
-name: always
-on: [push]
+name: deploy
 
-env:
-  CARGO_TERM_COLOR: always
+on:
+  push:
+    tags:
+      - '*'
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
-    - name: Run CI
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Run tests
       run: make ci
+
+    - name: Install Cross
+      run: cargo install cross --git https://github.com/cross-rs/cross
+
+    - name: Build all artifacts
+      run: make build-all
+
+    - name: "Release gh release latest"
+      uses: ncipollo/release-action@v1
+      with:
+        tag: latest
+        name: Latest
+        allowUpdates: true
+        artifacts: "builds/*"
+        bodyFile: "builds/buildout"
+        token: ${{ secrets.GITHUB_TOKEN }}

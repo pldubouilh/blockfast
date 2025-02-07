@@ -16,14 +16,15 @@ ci:: test
 	cargo clippy -- -D warnings
 
 build-all::
-	cargo build --target x86_64-unknown-linux-musl --release
 	mkdir -p builds
-	cp target/x86_64-unknown-linux-musl/release/blockfast builds
 	rustc --version > builds/buildout
-	sha256sum builds/blockfast >> builds/buildout
-
-publish:: ci
-	cargo publish
+	cross build --release --target x86_64-unknown-linux-musl
+	cross build --release --target aarch64-unknown-linux-musl
+	cross build --release --target armv7-unknown-linux-musleabihf
+	cp target/x86_64-unknown-linux-musl/release/blockfast builds/blockfast-x86_64-linux
+	cp target/aarch64-unknown-linux-musl/release/blockfast builds/blockfast-aarch64-linux
+	cp target/armv7-unknown-linux-musleabihf/release/blockfast builds/blockfast-arm7-linux
+	sha256sum builds/* >> builds/buildout
 
 watch::
 	ls src/*.rs | entr -rc -- make run

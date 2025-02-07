@@ -39,7 +39,6 @@ pub fn resolve_path(a: &str) -> Result<PathBuf> {
 }
 
 pub fn parse_regex(a: &str) -> Result<Regex> {
-    println!("a {:?}", a);
     let r: Regex = Regex::new(a).context("invalid regexp for generic parser")?;
     Ok(r)
 }
