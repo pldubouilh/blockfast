@@ -18,6 +18,11 @@ async fn run() -> Result<()> {
     let args = utils::Args::parse();
     let mut ml = MuxedLines::new()?;
 
+    // HTTP statuses
+    let ok_statuses = args.valid_http_statuses.clone();
+    let ok_statuses_parsed = parse_statuses(&ok_statuses)?;
+    let ok_statuses_ref = ok_statuses_parsed.as_ref();
+
     // generic parser
     let generic_path = args.generic_logpath.as_ref();
     let generic_ip_re = args.generic_ip.as_ref();
@@ -64,10 +69,6 @@ async fn run() -> Result<()> {
     if json_logpath.is_none() && clf_logpath.is_none() && sshd_logpath.is_none() {
         bail!("no log files to parse, see --help");
     }
-
-    // HTTP statuses
-    let ok_statuses = args.valid_http_statuses.clone();
-    let ok_statuses_ref = ok_statuses.as_ref();
 
     // jail
     let jail = Jail::new(args.allowance, args.jailtime)?;

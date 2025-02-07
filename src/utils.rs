@@ -44,6 +44,33 @@ pub fn parse_regex(a: &str) -> Result<Regex> {
     Ok(r)
 }
 
+pub fn parse_statuses(a: &str) -> Result<Vec<u32>> {
+    let mut statuses = vec![];
+    for s in a.split(',') {
+        if s.contains("xx") {
+            let range = s.replace("xx", "");
+            let range = range.parse::<u32>().context("invalid range")?;
+            let range = range * 100;
+            for i in 0..100 {
+                let status = range + i;
+                statuses.push(status);
+            }
+        } else if s.contains("x") {
+            let range = s.replace("x", "");
+            let range = range.parse::<u32>().context("invalid range")?;
+            let range = range * 10;
+            for i in 0..10 {
+                let status = range + i;
+                statuses.push(status);
+            }
+        } else {
+            let status = s.parse::<u32>().context("invalid status")?;
+            statuses.push(status);
+        }
+    }
+    Ok(statuses)
+}
+
 pub(crate) use log;
 
 #[derive(Parser, Debug)]
@@ -110,7 +137,7 @@ pub struct Args {
     #[clap(long)]
     pub generic_negative: Option<String>,
 
-    /// valid http statuses (for CLF and JSON logs)
-    #[clap(long, default_values_t = [200,101])]
-    pub valid_http_statuses: Vec<u32>,
+    /// valid http statuses (for CLF and JSON logs). Coma separated list, accepts ranges with XX.
+    #[clap(long, default_value = "10x,20x,30x,404,408")]
+    pub valid_http_statuses: String,
 }
