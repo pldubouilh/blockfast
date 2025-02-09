@@ -1,7 +1,12 @@
+use std::result::Result::Ok;
+
 use anyhow::*;
-use linemux::MuxedLines;
+use clap::Parser;
+use linemux::{Line, MuxedLines};
 
 mod clf;
+mod generic;
+mod json;
 mod sshd;
 mod utils;
 
@@ -9,91 +14,110 @@ mod jail;
 use crate::jail::Jail;
 use crate::utils::*;
 
-fn judge(
-    path_sshd: &str,
-    path_clf: &str,
-    payload: &str,
-    path: &str,
-    jail: &Jail,
-) -> Result<Judgment> {
-    let do_sshd = !path_sshd.is_empty();
-    let do_clf = !path_clf.is_empty();
-    let mut target = "";
-
-    let ret_parse = if do_sshd && path.ends_with(path_sshd) {
-        target = "sshd";
-        sshd::parse(payload)
-    } else if do_clf && path.ends_with(path_clf) {
-        target = "clf ";
-        clf::parse(payload)
-    } else {
-        Err(anyhow!("cant locate file !"))
-    };
-
-    let ip = match ret_parse? {
-        ParsingStatus::OkEntry => return Ok(Judgment::Good),
-        ParsingStatus::BadEntry(ip) => ip,
-    };
-
-    match jail.probe(ip)? {
-        JailStatus::Remand => Ok(Judgment::Remand),
-        JailStatus::Jailed(ip) => Ok(Judgment::Bad(target, ip)),
-    }
-}
-
 async fn run() -> Result<()> {
-    let args = utils::cli().get_matches();
-    let mut lines = MuxedLines::new()?;
+    let args = utils::Args::parse();
+    let mut ml = MuxedLines::new()?;
 
-    // jail
-    let jailtime_str = args.value_of("jailtime").unwrap_or("");
-    let jailtime = jailtime_str.parse().context("parsing jailtime")?;
+    // HTTP statuses
+    let ok_statuses = args.valid_http_statuses.clone();
+    let ok_statuses_parsed = parse_statuses(&ok_statuses)?;
+    let ok_statuses_ref = ok_statuses_parsed.as_ref();
 
-    let allowance_str = args.value_of("allowance").unwrap_or("");
-    let allowance = allowance_str.parse().context("parsing allowance")?;
-
-    let jail = Jail::new(allowance, jailtime)?;
-    eprintln!(
-        "+ jail setup, offences allowed: {}, jailtime {}s",
-        allowance, jailtime
-    );
+    // generic parser
+    let generic_path = args.generic_logpath.as_ref();
+    let generic_ip_re = args.generic_ip.as_ref();
+    let generic_positive = args.generic_positive.as_ref();
+    let generic_negative = args.generic_negative.as_ref();
+    if args.generic_ip.is_some()
+        || args.generic_logpath.is_some()
+        || args.generic_positive.is_some()
+        || args.generic_negative.is_some()
+    {
+        if args.generic_ip.is_none() || args.generic_logpath.is_none() {
+            bail!("generic parser needs both ip regex and log file path");
+        }
+        if !(args.generic_positive.is_some() ^ args.generic_negative.is_some()) {
+            bail!("generic parser requires either a positive or a negative regex");
+        }
+        if let Some(p) = generic_path.as_ref() {
+            ml.add_file(&p).await?;
+            log!("starting with generic parsing at {:?}", &p);
+        }
+    }
 
     // sshd
-    let path_sshd = args.value_of("sshd_logpath").unwrap_or("");
-    if !path_sshd.is_empty() {
-        lines.add_file(path_sshd).await?;
-        eprintln!("+ starting with sshd parsing at {}", path_sshd);
+    let sshd_logpath = args.sshd_logpath.as_ref();
+    if let Some(p) = sshd_logpath {
+        ml.add_file(&p).await?;
+        log!("starting with sshd parsing at {:?}", &p);
     }
 
     // common log format
-    let path_clf = args.value_of("clf_logpath").unwrap_or("");
-    if !path_clf.is_empty() {
-        lines.add_file(path_clf).await?;
-        eprintln!("+ starting with clf parsing at {}", path_clf);
+    let clf_logpath = args.clf_logpath.as_ref();
+    if let Some(p) = clf_logpath {
+        ml.add_file(&p).await?;
+        log!("starting with clf parsing at {:?}", &p);
     }
 
-    while let Ok(Some(line)) = lines.next_line().await {
-        let payload = line.line();
-        let path = line.source().display().to_string();
+    // json
+    let json_logpath = args.json_logpath.as_ref();
+    if let Some(p) = json_logpath {
+        ml.add_file(&p).await?;
+        log!("starting with json parsing at {:?}", &p);
+    }
 
-        match judge(path_sshd, path_clf, payload, &path, &jail) {
-            Err(err) => eprintln!("! ERR {:?} - file {}", err, path),
-            Ok(Judgment::Good) => {}
-            Ok(Judgment::Remand) => {}
-            Ok(Judgment::Bad(target, ip)) => {
-                eprintln!("~ too many infraction, {} jailtime for: {}", target, ip)
-            }
+    if json_logpath.is_none() && clf_logpath.is_none() && sshd_logpath.is_none() {
+        bail!("no log files to parse, see --help");
+    }
+
+    // jail
+    let jail = Jail::new(args.allowance, args.jailtime)?;
+
+    let assess_line = |line: Line| {
+        let payload = line.line();
+        let path_buf = Some(line.source().to_path_buf());
+        let path = path_buf.as_ref();
+
+        let (target, ret) = if path == sshd_logpath {
+            ("sshd", sshd::parse(payload)?)
+        } else if path == clf_logpath {
+            ("clf", clf::parse(payload, ok_statuses_ref)?)
+        } else if path == json_logpath {
+            ("json", json::parse(payload, ok_statuses_ref)?)
+        } else if path == generic_path {
+            (
+                "generic",
+                generic::parse(payload, generic_ip_re, generic_positive, generic_negative)?,
+            )
+        } else {
+            bail!("file {:?} unknown ?", path)
         };
+
+        if let ParsingStatus::BadEntry(ip) = ret {
+            if args.verbose {
+                log!("{} logged offence for {}", target, ip);
+            }
+            let banned = jail.sentence(ip)?;
+            if banned {
+                log!("{} jailtime for {}", target, ip);
+            }
+        }
+
+        Ok(())
+    };
+
+    while let Ok(Some(line)) = ml.next_line().await {
+        if let Err(e) = assess_line(line) {
+            log!("ERR: {:?}", e);
+        }
     }
 
     Ok(())
 }
 
 #[tokio::main]
-async fn main() -> std::io::Result<()> {
-    let ret = run().await;
-    let _ = ret.map_err(|e| eprintln!("! ERROR {:?}", e));
+async fn main() -> Result<()> {
+    run().await?;
     eprintln!("\n");
-    let _ = utils::cli().print_help();
     Ok(())
 }
