@@ -1,4 +1,8 @@
+BLOCKFAST_VERS := $(shell date '+%Y-%m-%d') / $(shell git rev-parse --short HEAD)
+export BLOCKFAST_VERS
+
 build::
+	echo $(BLOCKFAST_VERS)
 	cargo build
 	cargo clippy --all
 	cargo fmt --all

@@ -77,7 +77,7 @@ pub(crate) use log;
     name = "Blockfast",
     author = "pierre dubouilh <pldubouilh@gmail.com>",
     arg_required_else_help = true,
-    version,
+    version = option_env!("BLOCKFAST_VERS").unwrap_or("unknown"),
     long_about = None,
     about = "
 Blockfast - block internets scanners fast 🍶
