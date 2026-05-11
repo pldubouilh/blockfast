@@ -1,8 +1,8 @@
-BLOCKFAST_VERS := $(shell date '+%Y-%m-%d') / $(shell git rev-parse --short HEAD)
+BLOCKFAST_VERS := $(shell git show -s --format=%cd --date=format:%Y-%m-%d HEAD) / $(shell git rev-parse --short HEAD)
 export BLOCKFAST_VERS
 
 build::
-	echo $(BLOCKFAST_VERS)
+	@echo $(BLOCKFAST_VERS)
 	cargo build
 	cargo clippy --all
 	cargo fmt --all
@@ -21,14 +21,19 @@ ci:: test
 
 build-all::
 	mkdir -p builds
-	rustc --version > builds/buildout
 	cross build --release --target x86_64-unknown-linux-musl
 	cross build --release --target aarch64-unknown-linux-musl
 	cross build --release --target armv7-unknown-linux-musleabihf
 	cp target/x86_64-unknown-linux-musl/release/blockfast builds/blockfast-x86_64-linux
 	cp target/aarch64-unknown-linux-musl/release/blockfast builds/blockfast-aarch64-linux
 	cp target/armv7-unknown-linux-musleabihf/release/blockfast builds/blockfast-arm7-linux
+	chmod +x builds/blockfast-*
+	echo '```' > builds/buildout
+	echo $(BLOCKFAST_VERS) >> builds/buildout
+	rustc --version >> builds/buildout
 	sha256sum builds/* >> builds/buildout
+	echo '```' >> builds/buildout
+	cat builds/buildout
 
 watch::
 	ls src/*.rs | entr -rc -- make run

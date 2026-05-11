@@ -10,7 +10,7 @@ lazy_static! {
 }
 
 #[allow(clippy::bind_instead_of_map)]
-pub fn parse(line: &str, valid_statuses: &[u32]) -> Result<ParsingStatus> {
+pub fn parse(line: &str, invalid_statuses: &[u32]) -> Result<ParsingStatus> {
     let ip = RE_IP
         .captures(line)
         .and_then(|c| c.get(1))
@@ -25,8 +25,8 @@ pub fn parse(line: &str, valid_statuses: &[u32]) -> Result<ParsingStatus> {
         .and_then(|e| e.parse::<u32>().ok())
         .ok_or_else(|| anyhow!("cant parse clf line - status"))?;
 
-    let is_good_status = valid_statuses.iter().any(|s| s == &status);
-    if !is_good_status {
+    let is_bad_status = invalid_statuses.iter().any(|s| s == &status);
+    if is_bad_status {
         return Ok(ParsingStatus::BadEntry(ip));
     }
 
@@ -45,7 +45,7 @@ mod tests {
         ];
 
         vectors.iter().for_each(|e| {
-            let ret = parse(*e, &vec![200, 404]).unwrap();
+            let ret = parse(*e, &vec![401, 429]).unwrap();
             match ret {
                 ParsingStatus::BadEntry(_) => {}
                 _ => panic!("bad parsing"),
@@ -61,7 +61,7 @@ mod tests {
         ];
 
         vectors.iter().for_each(|e| {
-            let ret = parse(*e, &vec![200, 404]).unwrap();
+            let ret = parse(*e, &vec![401, 429]).unwrap();
             match ret {
                 ParsingStatus::OkEntry => {}
                 _ => panic!("bad parsing"),
@@ -77,7 +77,7 @@ mod tests {
         ];
 
         vectors.iter().for_each(|e| {
-            let ret = parse(*e, &vec![200, 404]);
+            let ret = parse(*e, &vec![429, 401]);
             assert!(ret.is_err());
         })
     }

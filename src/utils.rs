@@ -136,7 +136,7 @@ pub struct Args {
     #[clap(long)]
     pub generic_negative: Option<String>,
 
-    /// valid http statuses (for CLF and JSON logs). Coma separated list, accepts ranges with XX.
-    #[clap(long, default_value = "10x,20x,30x,404,408")]
-    pub valid_http_statuses: String,
+    /// invalid http statuses (for CLF and JSON logs). Coma separated list, accepts ranges with XX.
+    #[clap(long, default_value = "400,401,402,403")]
+    pub invalid_http_statuses: String,
 }

@@ -19,9 +19,9 @@ async fn run() -> Result<()> {
     let mut ml = MuxedLines::new()?;
 
     // HTTP statuses
-    let ok_statuses = args.valid_http_statuses.clone();
-    let ok_statuses_parsed = parse_statuses(&ok_statuses)?;
-    let ok_statuses_ref = ok_statuses_parsed.as_ref();
+    let invalid_statuses = args.invalid_http_statuses.clone();
+    let invalid_statuses_parsed = parse_statuses(&invalid_statuses)?;
+    let invalid_statuses_ref = invalid_statuses_parsed.as_ref();
 
     // generic parser
     let generic_path = args.generic_logpath.as_ref();
@@ -81,9 +81,9 @@ async fn run() -> Result<()> {
         let (target, ret) = if path == sshd_logpath {
             ("sshd", sshd::parse(payload)?)
         } else if path == clf_logpath {
-            ("clf", clf::parse(payload, ok_statuses_ref)?)
+            ("clf", clf::parse(payload, invalid_statuses_ref)?)
         } else if path == json_logpath {
-            ("json", json::parse(payload, ok_statuses_ref)?)
+            ("json", json::parse(payload, invalid_statuses_ref)?)
         } else if path == generic_path {
             (
                 "generic",

@@ -11,7 +11,7 @@ pub struct Jail {
     name: String,
     allowance: u8,
     jailtime: u32,
-    remand: Mutex<HashMap<IpAddr, (u8, u64)>>,
+    remand: Mutex<HashMap<IpAddr, (u8, u64)>>, // ip -> (hits, timestamp)
 }
 
 fn exec(program: &str, cmd: &str, err: &str) -> Result<(), Error> {
