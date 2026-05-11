@@ -66,7 +66,11 @@ async fn run() -> Result<()> {
         log!("starting with json parsing at {:?}", &p);
     }
 
-    if json_logpath.is_none() && clf_logpath.is_none() && sshd_logpath.is_none() {
+    if json_logpath.is_none()
+        && clf_logpath.is_none()
+        && sshd_logpath.is_none()
+        && generic_path.is_none()
+    {
         bail!("no log files to parse, see --help");
     }
 
