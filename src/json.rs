@@ -2,7 +2,7 @@ use crate::utils::ParsingStatus;
 use anyhow::*;
 use std::{net::IpAddr, str::FromStr};
 
-pub fn parse(line: &str, valid_statuses: &[u32]) -> Result<ParsingStatus> {
+pub fn parse(line: &str, invalid_statuses: &[u32]) -> Result<ParsingStatus> {
     let json: serde_json::Value = serde_json::from_str(line)?;
 
     let remote_ip = json
@@ -17,8 +17,8 @@ pub fn parse(line: &str, valid_statuses: &[u32]) -> Result<ParsingStatus> {
         .and_then(|r| r.as_u64())
         .ok_or_else(|| anyhow!("cant parse json line - status"))?;
 
-    let is_good_status = valid_statuses.iter().any(|s| s == &(status as u32));
-    if !is_good_status {
+    let is_bad_status = invalid_statuses.iter().any(|s| s == &(status as u32));
+    if is_bad_status {
         return Ok(ParsingStatus::BadEntry(remote_ip));
     }
 
@@ -37,7 +37,7 @@ mod tests {
         ];
 
         vectors.iter().for_each(|e| {
-            let ret = parse(*e, &vec![200, 404]).unwrap();
+            let ret = parse(*e, &vec![429, 401]).unwrap();
             match ret {
                 ParsingStatus::BadEntry(_) => {}
                 _ => panic!("bad parsing"),
@@ -53,7 +53,7 @@ mod tests {
         ];
 
         vectors.iter().for_each(|e| {
-            let ret = parse(*e, &vec![200, 404]).unwrap();
+            let ret = parse(*e, &vec![429, 401]).unwrap();
             match ret {
                 ParsingStatus::OkEntry => {}
                 _ => panic!("bad parsing"),
@@ -68,7 +68,7 @@ mod tests {
         ];
 
         vectors.iter().for_each(|e| {
-            let ret = parse(*e, &vec![200, 404]);
+            let ret = parse(*e, &vec![429, 401]);
             assert!(ret.is_err());
         })
     }
