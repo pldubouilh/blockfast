@@ -1,5 +1,5 @@
-use anyhow::{anyhow, Context, Result};
-use clap::Parser;
+use anyhow::{anyhow, bail, Context, Result};
+use clap::{ArgGroup, Parser};
 use regex::Regex;
 use std::{
     net::IpAddr,
@@ -43,28 +43,30 @@ pub fn parse_regex(a: &str) -> Result<Regex> {
     Ok(r)
 }
 
+/// Parse a comma-separated list of HTTP statuses with trailing-`x` wildcards.
+///
+/// Accepted forms per token: `NNN` (literal), `NNx` (10-wide range), `Nxx` (100-wide range).
+/// All expanded codes must fall in the valid HTTP range 100..=599.
 pub fn parse_statuses(a: &str) -> Result<Vec<u32>> {
+    if a.trim().is_empty() {
+        bail!("invalid_http_statuses: empty input");
+    }
     let mut statuses = vec![];
-    for s in a.split(',') {
-        if s.contains("xx") {
-            let range = s.replace("xx", "");
-            let range = range.parse::<u32>().context("invalid range")?;
-            let range = range * 100;
-            for i in 0..100 {
-                let status = range + i;
-                statuses.push(status);
+    for raw in a.split(',') {
+        let s = raw.trim();
+        let xs = s.chars().rev().take_while(|c| *c == 'x').count();
+        let digits = &s[..s.len() - xs];
+        if digits.is_empty() || !digits.chars().all(|c| c.is_ascii_digit()) {
+            bail!("invalid http status `{}`", s);
+        }
+        let base: u32 = digits.parse().context("invalid status")?;
+        let span = 10u32.pow(xs as u32);
+        let from = base * span;
+        for code in from..(from + span) {
+            if !(100..=599).contains(&code) {
+                bail!("status {} out of valid HTTP range (100..=599)", code);
             }
-        } else if s.contains("x") {
-            let range = s.replace("x", "");
-            let range = range.parse::<u32>().context("invalid range")?;
-            let range = range * 10;
-            for i in 0..10 {
-                let status = range + i;
-                statuses.push(status);
-            }
-        } else {
-            let status = s.parse::<u32>().context("invalid status")?;
-            statuses.push(status);
+            statuses.push(code);
         }
     }
     Ok(statuses)
@@ -93,6 +95,7 @@ Example:
     # generic log parser example with a log text to flag, and a regex to parse the offending IP.
     ./blockfast --generic-logpath=/tmp/generictest --generic-positive='Failed password' --generic-ip='from ([0-9a-fA-F:.]+) port'",
     verbatim_doc_comment,
+    group(ArgGroup::new("generic_match").args(["generic_positive", "generic_negative"])),
 )]
 
 pub struct Args {
@@ -139,4 +142,55 @@ pub struct Args {
     /// invalid http statuses (for CLF and JSON logs). Coma separated list, accepts ranges with XX.
     #[clap(long, default_value = "400,401,402,403")]
     pub invalid_http_statuses: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_statuses;
+
+    #[test]
+    fn literal() {
+        assert_eq!(parse_statuses("401").unwrap(), vec![401]);
+        assert_eq!(parse_statuses("401,404,429").unwrap(), vec![401, 404, 429]);
+    }
+
+    #[test]
+    fn ten_range() {
+        assert_eq!(
+            parse_statuses("40x").unwrap(),
+            (400..410).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn hundred_range() {
+        assert_eq!(
+            parse_statuses("4xx").unwrap(),
+            (400..500).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn mixed() {
+        let got = parse_statuses("401, 40x, 5xx").unwrap();
+        assert_eq!(got.len(), 1 + 10 + 100);
+        assert_eq!(got[0], 401);
+        assert!(got.contains(&500));
+        assert!(got.contains(&599));
+    }
+
+    #[test]
+    fn rejects_out_of_range() {
+        // 5x → 50..60, none of which are valid HTTP
+        assert!(parse_statuses("5x").is_err());
+    }
+
+    #[test]
+    fn rejects_garbage() {
+        assert!(parse_statuses("").is_err());
+        assert!(parse_statuses("xxx").is_err());
+        assert!(parse_statuses("1x2").is_err());
+        assert!(parse_statuses("abc").is_err());
+        assert!(parse_statuses("401,,402").is_err());
+    }
 }

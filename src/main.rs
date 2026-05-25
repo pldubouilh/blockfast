@@ -110,13 +110,20 @@ async fn run() -> Result<()> {
         Ok(())
     };
 
-    while let Ok(Some(line)) = ml.next_line().await {
-        if let Err(e) = assess_line(line) {
-            log!("ERR: {:?}", e);
+    loop {
+        match ml.next_line().await {
+            Ok(Some(line)) => {
+                if let Err(e) = assess_line(line) {
+                    log!("ERR: {:?}", e);
+                }
+            }
+            Ok(None) => {
+                log!("log stream ended, exiting");
+                return Ok(());
+            }
+            Err(e) => return Err(e.into()),
         }
     }
-
-    Ok(())
 }
 
 #[tokio::main]
