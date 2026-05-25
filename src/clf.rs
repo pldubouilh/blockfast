@@ -6,7 +6,7 @@ use std::{net::IpAddr, str::FromStr};
 
 lazy_static! {
     static ref RE_IP: Regex = Regex::new(r"^(\S+)\s").unwrap();
-    static ref RE_STATUS: Regex = Regex::new(r"(\d+)\s(\w+)$").unwrap();
+    static ref RE_STATUS: Regex = Regex::new(r"(\d+)\s+\S+\s*$").unwrap();
 }
 
 #[allow(clippy::bind_instead_of_map)]
@@ -67,6 +67,22 @@ mod tests {
                 _ => panic!("bad parsing"),
             }
         })
+    }
+
+    #[test]
+    fn bodyless() {
+        // CLF uses `-` for absent body bytes, both branches must still parse
+        let bad = "8.8.8.8 - p [25/Sep/2021:13:49:56 +0200] \"GET / HTTP/2.0\" 401 -";
+        match parse(bad, &vec![401, 429]).unwrap() {
+            ParsingStatus::BadEntry(_) => {}
+            _ => panic!("bad parsing"),
+        }
+
+        let ok = "8.8.8.8 - p [25/Sep/2021:13:49:56 +0200] \"GET / HTTP/2.0\" 304 -";
+        match parse(ok, &vec![401, 429]).unwrap() {
+            ParsingStatus::OkEntry => {}
+            _ => panic!("bad parsing"),
+        }
     }
 
     #[test]
