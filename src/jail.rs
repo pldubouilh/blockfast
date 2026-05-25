@@ -22,6 +22,12 @@ fn exec(program: &str, cmd: &str, err: &str) -> Result<(), Error> {
     Ok(())
 }
 
+fn exec_ok(program: &str, cmd: &str) -> Result<bool> {
+    let parts: Vec<&str> = cmd.split_whitespace().collect();
+    let out = Command::new(program).args(parts).output()?;
+    Ok(out.status.code() == Some(0))
+}
+
 impl Jail {
     pub fn new(allowance: u8, jailtime: u32) -> Result<Jail> {
         const ERR_MSG: &str = "error using ipset/iptables, maybe it's not installed, or this program isn't running as root ?";
@@ -31,13 +37,15 @@ impl Jail {
         let cmd = format!("create -exist {} hash:ip timeout {}", n, jailtime);
         exec("ipset", &cmd, ERR_MSG)?;
 
-        // setup input
-        let cmd = format!("-I INPUT 1 -m set -j DROP --match-set {} src", n);
-        exec("iptables", &cmd, ERR_MSG)?;
-
-        // setup fwd
-        let cmd = format!("-I FORWARD 1 -m set -j DROP --match-set {} src", n);
-        exec("iptables", &cmd, ERR_MSG)?;
+        // install drop rule on INPUT and FORWARD, but only if not already present
+        let rule_spec = format!("-m set -j DROP --match-set {} src", n);
+        for chain in &["INPUT", "FORWARD"] {
+            let check = format!("-C {} {}", chain, rule_spec);
+            if !exec_ok("iptables", &check)? {
+                let install = format!("-I {} 1 {}", chain, rule_spec);
+                exec("iptables", &install, ERR_MSG)?;
+            }
+        }
 
         log!("jail setup, allowance {}, time {}s", allowance, jailtime);
         Ok(Jail {
