@@ -124,19 +124,19 @@ pub struct Args {
     pub json_logpath: Option<PathBuf>,
 
     /// generic parser log file path
-    #[clap(long, value_parser = resolve_path)]
+    #[clap(long, value_parser = resolve_path, requires_all = ["generic_ip", "generic_match"])]
     pub generic_logpath: Option<PathBuf>,
 
     /// generic parser ip regex
-    #[clap(long , value_parser = parse_regex)]
+    #[clap(long, value_parser = parse_regex, requires = "generic_logpath")]
     pub generic_ip: Option<Regex>,
 
     /// generic parser positive - if a logline contains this, it is considered bad, the rest is good
-    #[clap(long)]
+    #[clap(long, requires = "generic_logpath")]
     pub generic_positive: Option<String>,
 
     /// generic parser negative - if a logline contains this, it is considered good, the rest is bad
-    #[clap(long)]
+    #[clap(long, requires = "generic_logpath")]
     pub generic_negative: Option<String>,
 
     /// invalid http statuses (for CLF and JSON logs). Coma separated list, accepts ranges with XX.

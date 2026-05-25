@@ -28,21 +28,9 @@ async fn run() -> Result<()> {
     let generic_ip_re = args.generic_ip.as_ref();
     let generic_positive = args.generic_positive.as_ref();
     let generic_negative = args.generic_negative.as_ref();
-    if args.generic_ip.is_some()
-        || args.generic_logpath.is_some()
-        || args.generic_positive.is_some()
-        || args.generic_negative.is_some()
-    {
-        if args.generic_ip.is_none() || args.generic_logpath.is_none() {
-            bail!("generic parser needs both ip regex and log file path");
-        }
-        if !(args.generic_positive.is_some() ^ args.generic_negative.is_some()) {
-            bail!("generic parser requires either a positive or a negative regex");
-        }
-        if let Some(p) = generic_path.as_ref() {
-            ml.add_file(&p).await?;
-            log!("starting with generic parsing at {:?}", &p);
-        }
+    if let Some(p) = generic_path {
+        ml.add_file(&p).await?;
+        log!("starting with generic parsing at {:?}", &p);
     }
 
     // sshd
