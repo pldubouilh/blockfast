@@ -46,7 +46,6 @@ Example:
     ./blockfast --generic-logpath=/tmp/generictest --generic-positive='Failed password' --generic-ip='from ([0-9a-fA-F:.]+) port'
 
 Usage: blockfast [OPTIONS]
-Usage: blockfast [OPTIONS]
 
 Options:
       --jailtime <JAILTIME>
@@ -60,7 +59,7 @@ Options:
   -c, --clf-logpath <CLF_LOGPATH>
           path of Common-Log-Format logfile (Apache, etc..)
   -j, --json-logpath <JSON_LOGPATH>
-          path of JSON HTTP logfile (Caddy)
+          path of JSON logfile (works with Caddy)
       --generic-logpath <GENERIC_LOGPATH>
           generic parser log file path
       --generic-ip <GENERIC_IP>
@@ -69,8 +68,8 @@ Options:
           generic parser positive - if a logline contains this, it is considered bad, the rest is good
       --generic-negative <GENERIC_NEGATIVE>
           generic parser negative - if a logline contains this, it is considered good, the rest is bad
-      --valid-http-statuses <VALID_HTTP_STATUSES>
-          valid http statuses (for CLF and JSON logs) [default: 200 101]
+      --invalid-http-statuses <INVALID_HTTP_STATUSES>
+          invalid http statuses (for CLF and JSON logs). Coma separated list, accepts ranges with XX [default: 400,401,402,403]
   -h, --help
           Print help
   -V, --version

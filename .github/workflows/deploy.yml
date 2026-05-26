@@ -12,6 +12,9 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
 
+    - name: Format
+      run: rustup component add rustfmt clippy
+
     - name: Run tests
       run: make ci
 
