@@ -97,7 +97,6 @@ Example:
     verbatim_doc_comment,
     group(ArgGroup::new("generic_match").args(["generic_positive", "generic_negative"])),
 )]
-
 pub struct Args {
     /// jail time (seconds)
     #[clap(long, default_value = "21600")]

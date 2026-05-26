@@ -116,7 +116,5 @@ async fn run() -> Result<()> {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    run().await?;
-    eprintln!("\n");
-    Ok(())
+    run().await
 }
