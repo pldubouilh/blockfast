@@ -110,21 +110,21 @@ pub struct Args {
     #[clap(short, long)]
     pub verbose: bool,
 
-    /// path of sshd logfile
+    /// path of sshd logfile, can be repeated
     #[clap(short, long, value_parser = resolve_path)]
-    pub sshd_logpath: Option<PathBuf>,
+    pub sshd_logpath: Vec<PathBuf>,
 
-    /// path of Common-Log-Format logfile (Apache, etc..)
+    /// path of Common-Log-Format logfile (Apache, etc..), can be repeated
     #[clap(short, long, value_parser = resolve_path)]
-    pub clf_logpath: Option<PathBuf>,
+    pub clf_logpath: Vec<PathBuf>,
 
-    /// path of JSON logfile (works with Caddy)
+    /// path of JSON logfile (works with Caddy), can be repeated
     #[clap(short, long, value_parser = resolve_path)]
-    pub json_logpath: Option<PathBuf>,
+    pub json_logpath: Vec<PathBuf>,
 
-    /// generic parser log file path
+    /// generic parser log file path, can be repeated
     #[clap(long, value_parser = resolve_path, requires_all = ["generic_ip", "generic_match"])]
-    pub generic_logpath: Option<PathBuf>,
+    pub generic_logpath: Vec<PathBuf>,
 
     /// generic parser ip regex
     #[clap(long, value_parser = parse_regex, requires = "generic_logpath")]
