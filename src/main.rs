@@ -4,9 +4,9 @@ use anyhow::*;
 use clap::Parser;
 use linemux::{Line, MuxedLines};
 
+mod caddy;
 mod clf;
 mod generic;
-mod json;
 mod utils;
 
 mod jail;
@@ -39,14 +39,14 @@ async fn run() -> Result<()> {
         log!("starting with clf parsing at {:?}", &p);
     }
 
-    // json
-    let json_logpaths = &args.json_logpath;
-    for p in json_logpaths {
+    // caddy json
+    let caddy_logpaths = &args.caddy_logpath;
+    for p in caddy_logpaths {
         ml.add_file(&p).await?;
-        log!("starting with json parsing at {:?}", &p);
+        log!("starting with caddy parsing at {:?}", &p);
     }
 
-    if json_logpaths.is_empty() && clf_logpaths.is_empty() && generic_paths.is_empty() {
+    if caddy_logpaths.is_empty() && clf_logpaths.is_empty() && generic_paths.is_empty() {
         bail!("no log files to parse, see --help");
     }
 
@@ -60,8 +60,8 @@ async fn run() -> Result<()> {
 
         let (target, ret) = if path.is_some_and(|p| clf_logpaths.contains(p)) {
             ("clf", clf::parse(payload, invalid_statuses_ref)?)
-        } else if path.is_some_and(|p| json_logpaths.contains(p)) {
-            ("json", json::parse(payload, invalid_statuses_ref)?)
+        } else if path.is_some_and(|p| caddy_logpaths.contains(p)) {
+            ("caddy", caddy::parse(payload, invalid_statuses_ref)?)
         } else if path.is_some_and(|p| generic_paths.contains(p)) {
             (
                 "generic",
