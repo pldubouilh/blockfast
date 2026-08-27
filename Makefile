@@ -9,10 +9,10 @@ build::
 
 run::
 	touch /tmp/clftest
-	touch /tmp/jsontest
+	touch /tmp/caddytest
 	touch /tmp/generictest
 	cargo build
-	sudo target/debug/blockfast -v -c=/tmp/clftest -j=/tmp/jsontest --generic-logpath=/tmp/generictest --generic-ip='from ([0-9a-fA-F:.]+) port' --generic-positive='Failed password'
+	sudo target/debug/blockfast -v --clf-logpath=/tmp/clftest --caddy-logpath=/tmp/caddytest --generic-logpath=/tmp/generictest --generic-ip='from ([0-9a-fA-F:.]+) port' --generic-positive='Failed password'
 
 ci:: test
 	cargo fmt --all -- --check
@@ -55,9 +55,9 @@ hit-clf::
 ok-clf::
 	echo "2.124.36.195 - p [25/Sep/2021:13:49:56 +0200] \"POST /some/rpc HTTP/2.0\" 200 23012" >> /tmp/clftest
 
-hit-json::
-	echo "{\"request\":{\"remote_ip\":\"1.124.36.19\"}, \"status\": 400}" >> /tmp/jsontest
+hit-caddy::
+	echo "{\"request\":{\"remote_ip\":\"1.124.36.19\"}, \"status\": 400}" >> /tmp/caddytest
 
-ok-json::
-	echo "{\"request\":{\"remote_ip\":\"2.124.36.19\"}, \"status\": 200}" >> /tmp/jsontest
+ok-caddy::
+	echo "{\"request\":{\"remote_ip\":\"2.124.36.19\"}, \"status\": 200}" >> /tmp/caddytest
 

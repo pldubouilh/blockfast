@@ -86,11 +86,11 @@ Blockfast - block internets scanners fast 🍶
 Author: pierre dubouilh <pldubouilh@gmail.com>
 
 Blockfast reads logs from various sources and blocks the offending IPs using iptables and ipset.
-It supports logs in Common-Log-Format (Apache, etc..), JSON (Caddy) and a generic logs parser.
+It supports logs in Common-Log-Format (Apache, nginx, etc..), Caddy JSON and a generic logs parser.
 
 Example:
     # block invalid http statuses from caddy
-    ./blockfast -j=/caddy/logs
+    ./blockfast --caddy-logpath=/caddy/logs
 
     # generic log parser example with a log text to flag, and a regex to parse the offending IP.
     ./blockfast --generic-logpath=/tmp/generictest --generic-positive='Failed password' --generic-ip='from ([0-9a-fA-F:.]+) port'",
@@ -110,13 +110,13 @@ pub struct Args {
     #[clap(short, long)]
     pub verbose: bool,
 
-    /// path of Common-Log-Format logfile (Apache, etc..), can be repeated
-    #[clap(short, long, value_parser = resolve_path)]
+    /// path of Common-Log-Format logfile (Apache, nginx, etc..), can be repeated
+    #[clap(long, value_parser = resolve_path)]
     pub clf_logpath: Vec<PathBuf>,
 
-    /// path of JSON logfile (works with Caddy), can be repeated
-    #[clap(short, long, value_parser = resolve_path)]
-    pub json_logpath: Vec<PathBuf>,
+    /// path of Caddy JSON logfile, can be repeated
+    #[clap(long, value_parser = resolve_path)]
+    pub caddy_logpath: Vec<PathBuf>,
 
     /// generic parser log file path, can be repeated
     #[clap(long, value_parser = resolve_path, requires_all = ["generic_ip", "generic_match"])]
@@ -134,7 +134,7 @@ pub struct Args {
     #[clap(long, requires = "generic_logpath")]
     pub generic_negative: Option<String>,
 
-    /// invalid http statuses (for CLF and JSON logs). Coma separated list, accepts ranges with XX.
+    /// invalid http statuses (for CLF and Caddy logs). Coma separated list, accepts ranges with XX.
     #[clap(long, default_value = "400,401,402,403")]
     pub invalid_http_statuses: String,
 }
