@@ -5,24 +5,29 @@ use regex::Regex;
 use std::{net::IpAddr, str::FromStr};
 
 lazy_static! {
-    static ref RE_IP: Regex = Regex::new(r"^(\S+)\s").unwrap();
-    static ref RE_STATUS: Regex = Regex::new(r"(\d+)\s+\S+\s*$").unwrap();
+    // anchored on the left side of the line: host, ident, authuser, [date],
+    // the quoted request (honouring backslash escapes, so a quote injected in
+    // the URL cannot shift the match), then the status right after it. this
+    // covers plain CLF and the combined format - the trailing attacker
+    // controlled "referer" "user-agent" fields are never scanned
+    static ref RE_CLF: Regex =
+        Regex::new(r#"^(\S+)\s+\S+\s+\S+\s+\[[^\]]*\]\s+"(?:[^"\\]|\\.)*"\s+(\d{3})(?:\s|$)"#)
+            .unwrap();
 }
 
-#[allow(clippy::bind_instead_of_map)]
 pub fn parse(line: &str, invalid_statuses: &[u32]) -> Result<ParsingStatus> {
-    let ip = RE_IP
+    let caps = RE_CLF
         .captures(line)
-        .and_then(|c| c.get(1))
-        .and_then(|g| Some(g.as_str()))
-        .and_then(|e| IpAddr::from_str(e).ok())
+        .ok_or_else(|| anyhow!("cant parse clf line"))?;
+
+    let ip = caps
+        .get(1)
+        .and_then(|g| IpAddr::from_str(g.as_str()).ok())
         .ok_or_else(|| anyhow!("cant parse clf line - ip"))?;
 
-    let status = RE_STATUS
-        .captures(line)
-        .and_then(|c| c.get(1))
-        .and_then(|g| Some(g.as_str()))
-        .and_then(|e| e.parse::<u32>().ok())
+    let status = caps
+        .get(2)
+        .and_then(|g| g.as_str().parse::<u32>().ok())
         .ok_or_else(|| anyhow!("cant parse clf line - status"))?;
 
     let is_bad_status = invalid_statuses.iter().any(|s| s == &status);
@@ -67,6 +72,34 @@ mod tests {
                 _ => panic!("bad parsing"),
             }
         })
+    }
+
+    #[test]
+    fn combined_format() {
+        // combined log format appends "referer" "user-agent" - the old parser
+        // read digits out of the user-agent as the status and silently missed these
+        let bad = r#"8.8.8.8 - - [25/Sep/2021:13:49:56 +0200] "GET /admin HTTP/1.1" 401 923 "https://example.com/" "Mozilla/5.0 (X11; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0""#;
+        match parse(bad, &vec![401, 429]).unwrap() {
+            ParsingStatus::BadEntry(_) => {}
+            _ => panic!("bad parsing"),
+        }
+
+        let ok = r#"8.8.8.8 - - [25/Sep/2021:13:49:56 +0200] "GET / HTTP/1.1" 200 923 "https://example.com/" "Mozilla/5.0 (X11; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0""#;
+        match parse(ok, &vec![401, 429]).unwrap() {
+            ParsingStatus::OkEntry => {}
+            _ => panic!("bad parsing"),
+        }
+    }
+
+    #[test]
+    fn quote_injection() {
+        // servers escape quotes in the logged request - an escaped `\" 401 `
+        // inside the URL must not be mistaken for the end of the request field
+        let ok = r#"8.8.8.8 - - [25/Sep/2021:13:49:56 +0200] "GET /x?a=\" 401 - HTTP/1.1" 200 923"#;
+        match parse(ok, &vec![401, 429]).unwrap() {
+            ParsingStatus::OkEntry => {}
+            _ => panic!("bad parsing"),
+        }
     }
 
     #[test]
