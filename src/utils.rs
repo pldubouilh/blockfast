@@ -86,11 +86,11 @@ Blockfast - block internets scanners fast 🍶
 Author: pierre dubouilh <pldubouilh@gmail.com>
 
 Blockfast reads logs from various sources and blocks the offending IPs using iptables and ipset.
-It supports logs from sshd, Common-Log-Format (Apache, etc..), JSON (Caddy) and a generic logs parser.
+It supports logs in Common-Log-Format (Apache, etc..), JSON (Caddy) and a generic logs parser.
 
 Example:
-    # block invalid sshd attempts & invalid http statuses from caddy
-    ./blockfast -s=/var/log/auth.log -j=/caddy/logs
+    # block invalid http statuses from caddy
+    ./blockfast -j=/caddy/logs
 
     # generic log parser example with a log text to flag, and a regex to parse the offending IP.
     ./blockfast --generic-logpath=/tmp/generictest --generic-positive='Failed password' --generic-ip='from ([0-9a-fA-F:.]+) port'",
@@ -109,10 +109,6 @@ pub struct Args {
     /// log all offences
     #[clap(short, long)]
     pub verbose: bool,
-
-    /// path of sshd logfile, can be repeated
-    #[clap(short, long, value_parser = resolve_path)]
-    pub sshd_logpath: Vec<PathBuf>,
 
     /// path of Common-Log-Format logfile (Apache, etc..), can be repeated
     #[clap(short, long, value_parser = resolve_path)]

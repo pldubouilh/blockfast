@@ -8,12 +8,11 @@ build::
 	cargo fmt --all
 
 run::
-	touch /tmp/sshdtest
 	touch /tmp/clftest
 	touch /tmp/jsontest
 	touch /tmp/generictest
 	cargo build
-	sudo target/debug/blockfast -v -s=/tmp/sshdtest -c=/tmp/clftest -j=/tmp/jsontest --generic-logpath=/tmp/generictest --generic-ip='from ([0-9a-fA-F:.]+) port' --generic-positive='Failed password'
+	sudo target/debug/blockfast -v -c=/tmp/clftest -j=/tmp/jsontest --generic-logpath=/tmp/generictest --generic-ip='from ([0-9a-fA-F:.]+) port' --generic-positive='Failed password'
 
 ci:: test
 	cargo fmt --all -- --check
@@ -43,12 +42,6 @@ test::
 
 release::
 	cargo build --target x86_64-unknown-linux-musl --release
-
-hit-sshd::
-	echo "Sep 26 06:25:32 livecompute sshd[23254]: Invalid user neal from 9.124.36.195" >> /tmp/sshdtest
-
-ok-sshd::
-	echo "Sep 26 06:25:19 livecompute sshd[23246]: successful login 8.124.36.195 port 41883 ssh2" >> /tmp/sshdtest
 
 hit-generic::
 	echo "Sep 26 06:25:19 livecompute sshd[23246]: Failed password for root from 179.124.36.195 port 41883 ssh2"  >> /tmp/generictest

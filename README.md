@@ -3,7 +3,6 @@
 Block internets scanners fast 🍶
 
 Features:
-  - SSH log parser
   - Common Log Format parser (apache logs, etc...)
   - JSON log parser (caddy logs)
   - Generic log parser
@@ -14,16 +13,15 @@ Features:
 
 ## example
 ```txt
-$ ./blockfast -s=/var/log/auth.log -j=/caddy/logs
-1737927469 - starting with sshd parsing at "/tmp/sshdtest"
+$ ./blockfast -j=/caddy/logs
 1737927469 - starting with json parsing at "/tmp/jsontest"
 1737927469 - jail setup, allowance 5, time 21600s
-1737927477 - sshd logged offence for 9.124.36.195
-1737927478 - sshd logged offence for 9.124.36.195
-1737927479 - sshd logged offence for 9.124.36.195
-1737927479 - sshd logged offence for 9.124.36.195
-1737927480 - sshd logged offence for 9.124.36.195
-1737927480 - sshd jailtime for 9.124.36.195
+1737927477 - json logged offence for 9.124.36.195
+1737927478 - json logged offence for 9.124.36.195
+1737927479 - json logged offence for 9.124.36.195
+1737927479 - json logged offence for 9.124.36.195
+1737927480 - json logged offence for 9.124.36.195
+1737927480 - json jailtime for 9.124.36.195
 ```
 
 ## build
@@ -36,11 +34,11 @@ Blockfast - block internets scanners fast 🍶
 Author: pierre dubouilh <pldubouilh@gmail.com>
 
 Blockfast reads logs from various sources and blocks the offending IPs using iptables and ipset.
-It supports logs from sshd, Common-Log-Format (Apache, etc..), JSON (Caddy) and a generic logs parser.
+It supports logs in Common-Log-Format (Apache, etc..), JSON (Caddy) and a generic logs parser.
 
 Example:
-    # block invalid sshd attempts & invalid http statuses from caddy
-    ./blockfast -s=/var/log/auth.log -j=/caddy/logs
+    # block invalid http statuses from caddy
+    ./blockfast -j=/caddy/logs
 
     # generic log parser example with a log text to flag, and a regex to parse the offending IP.
     ./blockfast --generic-logpath=/tmp/generictest --generic-positive='Failed password' --generic-ip='from ([0-9a-fA-F:.]+) port'
@@ -54,14 +52,12 @@ Options:
           how many offences allowed (max 255) [default: 5]
   -v, --verbose
           log all offences
-  -s, --sshd-logpath <SSHD_LOGPATH>
-          path of sshd logfile
   -c, --clf-logpath <CLF_LOGPATH>
-          path of Common-Log-Format logfile (Apache, etc..)
+          path of Common-Log-Format logfile (Apache, etc..), can be repeated
   -j, --json-logpath <JSON_LOGPATH>
-          path of JSON logfile (works with Caddy)
+          path of JSON logfile (works with Caddy), can be repeated
       --generic-logpath <GENERIC_LOGPATH>
-          generic parser log file path
+          generic parser log file path, can be repeated
       --generic-ip <GENERIC_IP>
           generic parser ip regex
       --generic-positive <GENERIC_POSITIVE>
