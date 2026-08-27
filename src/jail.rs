@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::net::IpAddr;
 use std::process::Command;
+use std::result::Result::Ok;
 use std::sync::Mutex;
 
 use anyhow::*;
@@ -22,6 +23,16 @@ fn exec(program: &str, cmd: &str, err: &str) -> Result<(), Error> {
     Ok(())
 }
 
+fn check_installed(program: &str) -> Result<()> {
+    match Command::new(program).arg("--version").output() {
+        Ok(_) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            bail!("`{}` not found, please install it first", program)
+        }
+        Err(e) => Err(e).context(format!("cant execute `{}`", program)),
+    }
+}
+
 fn exec_ok(program: &str, cmd: &str) -> Result<bool> {
     let parts: Vec<&str> = cmd.split_whitespace().collect();
     let out = Command::new(program).args(parts).output()?;
@@ -30,7 +41,10 @@ fn exec_ok(program: &str, cmd: &str) -> Result<bool> {
 
 impl Jail {
     pub fn new(allowance: u8, jailtime: u32) -> Result<Jail> {
-        const ERR_MSG: &str = "error using ipset/iptables, maybe it's not installed, or this program isn't running as root ?";
+        const ERR_MSG: &str =
+            "error using ipset/iptables, maybe this program isn't running as root ?";
+        check_installed("ipset")?;
+        check_installed("iptables")?;
         let n = format!("blockfast_jail_{}", jailtime);
 
         // create
