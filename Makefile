@@ -50,14 +50,14 @@ ok-generic::
 	echo "Sep 26 06:25:19 livecompute sshd[23246]: Successful login for root from 179.124.36.195 port 41883 ssh2"  >> /tmp/generictest
 
 hit-clf::
-	echo "1.124.36.195 - p [25/Sep/2021:13:49:56 +0200] \"POST /some/rpc HTTP/2.0\" 401 923" >> /tmp/clftest
+	echo "1.124.36.195 - p [25/Sep/2021:13:49:56 +0200] \"GET /.env HTTP/2.0\" 200 923" >> /tmp/clftest
 
 ok-clf::
 	echo "2.124.36.195 - p [25/Sep/2021:13:49:56 +0200] \"POST /some/rpc HTTP/2.0\" 200 23012" >> /tmp/clftest
 
 hit-caddy::
-	echo "{\"request\":{\"remote_ip\":\"1.124.36.19\"}, \"status\": 400}" >> /tmp/caddytest
+	echo "{\"request\":{\"remote_ip\":\"1.124.36.19\",\"uri\":\"/.env\"}, \"status\": 200}" >> /tmp/caddytest
 
 ok-caddy::
-	echo "{\"request\":{\"remote_ip\":\"2.124.36.19\"}, \"status\": 200}" >> /tmp/caddytest
+	echo "{\"request\":{\"remote_ip\":\"2.124.36.19\",\"uri\":\"/\"}, \"status\": 200}" >> /tmp/caddytest
 

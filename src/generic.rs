@@ -30,7 +30,7 @@ pub fn parse(
         .and_then(|e| IpAddr::from_str(e).ok())
         .ok_or_else(|| anyhow!("cant parse clf line - ip"))?;
 
-    Ok(ParsingStatus::BadEntry(ip))
+    Ok(ParsingStatus::BadEntry(ip, None))
 }
 
 #[cfg(test)]
@@ -51,7 +51,7 @@ mod tests {
 
         let ret = parse(FAILED, Some(&ip), Some(&positive), None).unwrap();
         match ret {
-            ParsingStatus::BadEntry(_) => {}
+            ParsingStatus::BadEntry(..) => {}
             _ => panic!("bad parsing"),
         }
 
@@ -76,7 +76,7 @@ mod tests {
 
         let ret = parse(FAILED, Some(&ip), None, Some(&negative)).unwrap();
         match ret {
-            ParsingStatus::BadEntry(_) => {}
+            ParsingStatus::BadEntry(..) => {}
             _ => panic!("bad parsing"),
         }
     }

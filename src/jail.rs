@@ -70,8 +70,10 @@ impl Jail {
         })
     }
 
-    pub fn sentence(&self, ip: IpAddr) -> Result<bool> {
+    // allowance_override comes from a matched probe, else the global setting applies
+    pub fn sentence(&self, ip: IpAddr, allowance_override: Option<u8>) -> Result<bool> {
         let now = get_epoch();
+        let allowance = allowance_override.unwrap_or(self.allowance);
 
         let should_ban = {
             let mut locked_map = self.remand.lock().map_err(|_| anyhow!("cant lock"))?;
@@ -88,7 +90,7 @@ impl Jail {
                     }
                 })
                 .or_insert((1, now));
-            if hits < self.allowance {
+            if hits < allowance {
                 false
             } else {
                 locked_map.remove_entry(&ip);

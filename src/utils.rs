@@ -9,7 +9,8 @@ use std::{
 #[derive(Debug)]
 pub enum ParsingStatus {
     OkEntry,
-    BadEntry(IpAddr),
+    // offending ip, plus an optional per-probe allowance override
+    BadEntry(IpAddr, Option<u8>),
 }
 
 pub fn get_epoch() -> u64 {
@@ -118,6 +119,10 @@ pub struct Args {
     #[clap(long, value_parser = resolve_path)]
     pub caddy_logpath: Vec<PathBuf>,
 
+    /// path of a probelist JSON file, replaces the built-in probe list (see README)
+    #[clap(long, value_parser = resolve_path)]
+    pub probelist: Option<PathBuf>,
+
     /// generic parser log file path, can be repeated
     #[clap(long, value_parser = resolve_path, requires_all = ["generic_ip", "generic_match"])]
     pub generic_logpath: Vec<PathBuf>,
@@ -134,9 +139,11 @@ pub struct Args {
     #[clap(long, requires = "generic_logpath")]
     pub generic_negative: Option<String>,
 
-    /// invalid http statuses (for CLF and Caddy logs). Coma separated list, accepts ranges with XX.
-    #[clap(long, default_value = "400,401,402,403")]
-    pub invalid_http_statuses: String,
+    /// also flag these http statuses (for CLF and Caddy logs), on top of the built-in
+    /// scanner-path detection. Coma separated list, accepts ranges with XX, e.g. "403,5xx".
+    /// Careful: many apps serve 4xx statuses to legitimate clients.
+    #[clap(long)]
+    pub invalid_http_statuses: Option<String>,
 }
 
 #[cfg(test)]

@@ -3,9 +3,11 @@
 Block internets scanners fast 🍶
 
 Features:
-  - Common Log Format parser (apache, nginx logs, etc...)
+  - Built-in scanner detection, built for well-known probe paths (`/.env`, `/phpinfo.php`, etc...) 
+  - Extends built-in scanners using your own logs. See probelist.example.json
+  - Supports logs from Common Log Format (apache, nginx logs, etc...)
   - Caddy JSON log parser
-  - Generic log parser
+  - Generic log parser (regexp)
   - Sane defaults
   - Fast ip ban with `ipset`
   - Static release builds, no libc dependency
@@ -56,6 +58,8 @@ Options:
           path of Common-Log-Format logfile (Apache, nginx, etc..), can be repeated
       --caddy-logpath <CADDY_LOGPATH>
           path of Caddy JSON logfile, can be repeated
+      --probelist <PROBELIST>
+          path of a probelist JSON file, replaces the built-in probe list (see README)
       --generic-logpath <GENERIC_LOGPATH>
           generic parser log file path, can be repeated
       --generic-ip <GENERIC_IP>
@@ -65,7 +69,7 @@ Options:
       --generic-negative <GENERIC_NEGATIVE>
           generic parser negative - if a logline contains this, it is considered good, the rest is bad
       --invalid-http-statuses <INVALID_HTTP_STATUSES>
-          invalid http statuses (for CLF and Caddy logs). Coma separated list, accepts ranges with XX [default: 400,401,402,403]
+          also flag these http statuses (for CLF and Caddy logs), on top of the built-in scanner-path detection. Coma separated list, accepts ranges with XX, e.g. "403,5xx".
   -h, --help
           Print help
   -V, --version

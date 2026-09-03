@@ -7,6 +7,7 @@ use linemux::{Line, MuxedLines};
 mod caddy;
 mod clf;
 mod generic;
+mod probes;
 mod utils;
 
 mod jail;
@@ -17,10 +18,23 @@ async fn run() -> Result<()> {
     let args = utils::Args::parse();
     let mut ml = MuxedLines::new()?;
 
-    // HTTP statuses
-    let invalid_statuses = args.invalid_http_statuses.clone();
-    let invalid_statuses_parsed = parse_statuses(&invalid_statuses)?;
-    let invalid_statuses_ref = invalid_statuses_parsed.as_ref();
+    // HTTP statuses - opt-in, on top of the probe detection
+    let invalid_statuses_parsed = match &args.invalid_http_statuses {
+        Some(s) => parse_statuses(s)?,
+        None => vec![],
+    };
+    let invalid_statuses_ref: &[u32] = invalid_statuses_parsed.as_ref();
+
+    // probes - loaded from --probelist if given, built-in list otherwise
+    let probelist = match args.probelist.as_ref() {
+        Some(p) => {
+            let pl = probes::ProbeList::load(p)?;
+            log!("loaded {} probes from {:?}", pl.len(), p);
+            pl
+        }
+        None => probes::ProbeList::builtin(),
+    };
+    let probelist = &probelist;
 
     // generic parser
     let generic_paths = &args.generic_logpath;
@@ -59,9 +73,12 @@ async fn run() -> Result<()> {
         let path = path_buf.as_ref();
 
         let (target, ret) = if path.is_some_and(|p| clf_logpaths.contains(p)) {
-            ("clf", clf::parse(payload, invalid_statuses_ref)?)
+            ("clf", clf::parse(payload, probelist, invalid_statuses_ref)?)
         } else if path.is_some_and(|p| caddy_logpaths.contains(p)) {
-            ("caddy", caddy::parse(payload, invalid_statuses_ref)?)
+            (
+                "caddy",
+                caddy::parse(payload, probelist, invalid_statuses_ref)?,
+            )
         } else if path.is_some_and(|p| generic_paths.contains(p)) {
             (
                 "generic",
@@ -71,11 +88,11 @@ async fn run() -> Result<()> {
             bail!("file {:?} unknown ?", path)
         };
 
-        if let ParsingStatus::BadEntry(ip) = ret {
+        if let ParsingStatus::BadEntry(ip, allowance) = ret {
             if args.verbose {
                 log!("{} logged offence for {}", target, ip);
             }
-            let banned = jail.sentence(ip)?;
+            let banned = jail.sentence(ip, allowance)?;
             if banned {
                 log!("{} jailtime for {}", target, ip);
             }

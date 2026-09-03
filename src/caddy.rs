@@ -1,8 +1,9 @@
+use crate::probes::ProbeList;
 use crate::utils::ParsingStatus;
 use anyhow::*;
 use std::{net::IpAddr, str::FromStr};
 
-pub fn parse(line: &str, invalid_statuses: &[u32]) -> Result<ParsingStatus> {
+pub fn parse(line: &str, probelist: &ProbeList, invalid_statuses: &[u32]) -> Result<ParsingStatus> {
     let json: serde_json::Value = serde_json::from_str(line)?;
 
     let remote_ip = json
@@ -12,14 +13,24 @@ pub fn parse(line: &str, invalid_statuses: &[u32]) -> Result<ParsingStatus> {
         .and_then(|r| IpAddr::from_str(r).ok())
         .ok_or_else(|| anyhow!("cant parse json line - remote_ip"))?;
 
+    let uri = json
+        .get("request")
+        .and_then(|r| r.get("uri"))
+        .and_then(|r| r.as_str())
+        .ok_or_else(|| anyhow!("cant parse json line - uri"))?;
+
     let status = json
         .get("status")
         .and_then(|r| r.as_u64())
-        .ok_or_else(|| anyhow!("cant parse json line - status"))?;
+        .ok_or_else(|| anyhow!("cant parse json line - status"))? as u32;
 
-    let is_bad_status = invalid_statuses.iter().any(|s| s == &(status as u32));
+    if let Some(probe) = probelist.check(uri, status) {
+        return Ok(ParsingStatus::BadEntry(remote_ip, probe.allowance));
+    }
+
+    let is_bad_status = invalid_statuses.iter().any(|s| s == &status);
     if is_bad_status {
-        return Ok(ParsingStatus::BadEntry(remote_ip));
+        return Ok(ParsingStatus::BadEntry(remote_ip, None));
     }
 
     Ok(ParsingStatus::OkEntry)
@@ -37,9 +48,9 @@ mod tests {
         ];
 
         vectors.iter().for_each(|e| {
-            let ret = parse(*e, &vec![429, 401]).unwrap();
+            let ret = parse(*e, &ProbeList::builtin(), &vec![429, 401]).unwrap();
             match ret {
-                ParsingStatus::BadEntry(_) => {}
+                ParsingStatus::BadEntry(..) => {}
                 _ => panic!("bad parsing"),
             }
         })
@@ -53,12 +64,28 @@ mod tests {
         ];
 
         vectors.iter().for_each(|e| {
-            let ret = parse(*e, &vec![429, 401]).unwrap();
+            let ret = parse(*e, &ProbeList::builtin(), &vec![429, 401]).unwrap();
             match ret {
                 ParsingStatus::OkEntry => {}
                 _ => panic!("bad parsing"),
             }
         })
+    }
+
+    #[test]
+    fn probe_uri() {
+        // a probe path is an offence even with a 200 status and no status list
+        let bad = r#"{"request":{"remote_ip":"1.2.3.4","uri":"/.env"},"status":200}"#;
+        match parse(bad, &ProbeList::builtin(), &[]).unwrap() {
+            ParsingStatus::BadEntry(..) => {}
+            _ => panic!("bad parsing"),
+        }
+
+        let ok = r#"{"request":{"remote_ip":"1.2.3.4","uri":"/api/auth/me"},"status":200}"#;
+        match parse(ok, &ProbeList::builtin(), &[]).unwrap() {
+            ParsingStatus::OkEntry => {}
+            _ => panic!("bad parsing"),
+        }
     }
 
     #[test]
@@ -68,7 +95,7 @@ mod tests {
         ];
 
         vectors.iter().for_each(|e| {
-            let ret = parse(*e, &vec![429, 401]);
+            let ret = parse(*e, &ProbeList::builtin(), &vec![429, 401]);
             assert!(ret.is_err());
         })
     }
